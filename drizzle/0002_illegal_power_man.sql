@@ -1,0 +1,1 @@
+CREATE INDEX `bridge_burn_submissions_statistics_idx` ON `bridge_burn_submissions` (`submitted_at`,`transfer_type`,`amount_atomic`,`app_fee_atomic`);

@@ -36,6 +36,13 @@ export const bridgeBurnSubmissions = sqliteTable(
     ),
     index("bridge_burn_submissions_submitted_at_idx").on(table.submittedAt),
     index("bridge_burn_submissions_transfer_type_idx").on(table.transferType),
+    // Covers the rolling volume/fee/count report without reading table rows.
+    index("bridge_burn_submissions_statistics_idx").on(
+      table.submittedAt,
+      table.transferType,
+      table.amountAtomic,
+      table.appFeeAtomic
+    ),
     index("bridge_burn_submissions_route_idx").on(
       table.sourceChainId,
       table.targetChainId

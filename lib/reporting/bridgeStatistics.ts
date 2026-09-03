@@ -1,9 +1,15 @@
-import type { BridgeBurnStatistics } from "@/lib/db/bridgeBurnSubmissions";
+import Table from "cli-table3";
+import type {
+  BridgeBurnCategoryStatistics,
+  BridgeBurnStatistics,
+} from "@/lib/db/bridgeBurnSubmissions";
 
 export const BRIDGE_STATISTICS_DAY_OPTIONS = [7, 30, 90, 120] as const;
 export type BridgeStatisticsDays = (typeof BRIDGE_STATISTICS_DAY_OPTIONS)[number];
 
 const USDC_SCALE = 1_000_000n;
+const VOLUME_COMPACT_THRESHOLD_ATOMIC = 5_000_000_000n;
+const FEE_COMPACT_THRESHOLD_ATOMIC = 1_000_000_000n;
 
 export const parseBridgeStatisticsDays = (
   args: readonly string[]
@@ -31,19 +37,53 @@ export const formatAtomicUsdc = (value: number): string => {
   return `${groupedWhole}.${fraction}`;
 };
 
+const formatCompactAtomicUsdc = (
+  value: number,
+  compactThresholdAtomic: bigint
+): string => {
+  const atomic = BigInt(value);
+  if (atomic <= compactThresholdAtomic) {
+    return formatAtomicUsdc(value);
+  }
+
+  const usdc = Number(atomic) / Number(USDC_SCALE);
+  const units = [
+    { divisor: 1_000_000_000, suffix: "b" },
+    { divisor: 1_000_000, suffix: "m" },
+    { divisor: 1_000, suffix: "k" },
+  ] as const;
+  const unit = units.find(({ divisor }) => usdc >= divisor) ?? units.at(-1)!;
+
+  return `${(usdc / unit.divisor).toFixed(2)}${unit.suffix}`;
+};
+
 const formatCount = (value: number): string => value.toLocaleString("en-US");
 
-const formatMetric = (label: string, value: string): string =>
-  `  ${label.padEnd(8)} ${value.padStart(20)}`;
+const formatAmount = (value: number): string =>
+  `${formatCompactAtomicUsdc(value, VOLUME_COMPACT_THRESHOLD_ATOMIC)} USDC`;
 
-const formatCountMetric = (label: string, value: number): string =>
-  `  ${label.padEnd(8)} ${formatCount(value).padStart(20)}`;
+const formatFeeAmount = (value: number): string =>
+  `${formatCompactAtomicUsdc(value, FEE_COMPACT_THRESHOLD_ATOMIC)} USDC`;
 
-const formatSectionMetric = (label: string, value: string): string =>
-  `${label.padEnd(10)} ${value.padStart(20)}`;
+const renderTable = (rows: string[][]): string => {
+  const table = new Table({
+    head: ["Chain", "Speed", "Amount", "Fees", "Txs"],
+    colAligns: ["left", "left", "right", "right", "right"],
+    style: { head: [], border: [] },
+  });
 
-const formatSectionCountMetric = (label: string, value: number): string =>
-  formatSectionMetric(label, formatCount(value));
+  table.push(...rows);
+  return table.toString();
+};
+
+const categoryRows = (
+  label: string,
+  statistics: BridgeBurnCategoryStatistics
+): string[][] => [
+  [label, "", formatAmount(statistics.totalVolumeAtomic), formatFeeAmount(statistics.totalFeesAtomic), formatCount(statistics.totalBridges)],
+  ["", "Fast", formatAmount(statistics.fastVolumeAtomic), formatFeeAmount(statistics.fastFeesAtomic), formatCount(statistics.fastBridges)],
+  ["", "Standard", formatAmount(statistics.standardVolumeAtomic), formatFeeAmount(statistics.supportFeesAtomic), formatCount(statistics.standardBridges)],
+];
 
 export const renderBridgeStatistics = ({
   days,
@@ -54,16 +94,16 @@ export const renderBridgeStatistics = ({
 }): string =>
   [
     `Bridge statistics · last ${days} days`,
-    "────────────────────────────────────────",
-    formatSectionMetric("Volume", `${formatAtomicUsdc(statistics.totalVolumeAtomic)} USDC`),
-    formatMetric("Fast", `${formatAtomicUsdc(statistics.fastVolumeAtomic)} USDC`),
-    formatMetric("Standard", `${formatAtomicUsdc(statistics.standardVolumeAtomic)} USDC`),
-    "",
-    formatSectionMetric("Fees", `${formatAtomicUsdc(statistics.totalFeesAtomic)} USDC`),
-    formatMetric("Fast", `${formatAtomicUsdc(statistics.fastFeesAtomic)} USDC`),
-    formatMetric("Standard", `${formatAtomicUsdc(statistics.supportFeesAtomic)} USDC`),
-    "",
-    formatSectionCountMetric("Bridges", statistics.totalBridges),
-    formatCountMetric("Fast", statistics.fastBridges),
-    formatCountMetric("Standard", statistics.standardBridges),
+    "────────────────────────────────────────────────────────────────",
+    renderTable([
+      ...categoryRows("EVM", statistics.evm),
+      ...categoryRows("Solana", statistics.solana),
+      [
+        "Total",
+        "",
+        formatAmount(statistics.evm.totalVolumeAtomic + statistics.solana.totalVolumeAtomic),
+        formatFeeAmount(statistics.evm.totalFeesAtomic + statistics.solana.totalFeesAtomic),
+        formatCount(statistics.evm.totalBridges + statistics.solana.totalBridges),
+      ],
+    ]),
   ].join("\n");

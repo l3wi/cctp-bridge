@@ -5,7 +5,7 @@ import type { ParsedBridgeBurnEventMetadata } from "@/lib/analytics/bridgeBurnEv
 
 const USDC_SCALE = 1_000_000n;
 
-export interface BridgeBurnStatistics {
+export interface BridgeBurnCategoryStatistics {
   totalVolumeAtomic: number;
   fastVolumeAtomic: number;
   standardVolumeAtomic: number;
@@ -16,6 +16,23 @@ export interface BridgeBurnStatistics {
   fastBridges: number;
   standardBridges: number;
 }
+
+export interface BridgeBurnStatistics {
+  evm: BridgeBurnCategoryStatistics;
+  solana: BridgeBurnCategoryStatistics;
+}
+
+const createEmptyBridgeBurnCategoryStatistics = (): BridgeBurnCategoryStatistics => ({
+  totalVolumeAtomic: 0,
+  fastVolumeAtomic: 0,
+  standardVolumeAtomic: 0,
+  totalFeesAtomic: 0,
+  fastFeesAtomic: 0,
+  supportFeesAtomic: 0,
+  totalBridges: 0,
+  fastBridges: 0,
+  standardBridges: 0,
+});
 
 const decimalUsdcToAtomic = (value: string): bigint => {
   const [whole, fraction = ""] = value.split(".");
@@ -90,30 +107,45 @@ export const getBridgeBurnStatistics = async ({
   since: Date;
 }): Promise<BridgeBurnStatistics> => {
   const db = getDatabase();
-  const [summary] = await db
+  const rows = await db
     .select({
-      totalVolumeAtomic: sql<number>`coalesce(sum(${bridgeBurnSubmissions.amountAtomic}), 0)`,
-      fastVolumeAtomic: sql<number>`coalesce(sum(case when ${bridgeBurnSubmissions.transferType} = 'fast' then ${bridgeBurnSubmissions.amountAtomic} else 0 end), 0)`,
-      standardVolumeAtomic: sql<number>`coalesce(sum(case when ${bridgeBurnSubmissions.transferType} = 'standard' then ${bridgeBurnSubmissions.amountAtomic} else 0 end), 0)`,
-      totalFeesAtomic: sql<number>`coalesce(sum(${bridgeBurnSubmissions.appFeeAtomic}), 0)`,
-      fastFeesAtomic: sql<number>`coalesce(sum(case when ${bridgeBurnSubmissions.transferType} = 'fast' then ${bridgeBurnSubmissions.appFeeAtomic} else 0 end), 0)`,
-      supportFeesAtomic: sql<number>`coalesce(sum(case when ${bridgeBurnSubmissions.transferType} = 'standard' then ${bridgeBurnSubmissions.appFeeAtomic} else 0 end), 0)`,
-      totalBridges: sql<number>`count(*)`,
-      fastBridges: sql<number>`coalesce(sum(case when ${bridgeBurnSubmissions.transferType} = 'fast' then 1 else 0 end), 0)`,
-      standardBridges: sql<number>`coalesce(sum(case when ${bridgeBurnSubmissions.transferType} = 'standard' then 1 else 0 end), 0)`,
+      sourceChainId: bridgeBurnSubmissions.sourceChainId,
+      transferType: bridgeBurnSubmissions.transferType,
+      eventCount: sql<number>`count(*)`,
+      volumeAtomic: sql<number>`coalesce(sum(${bridgeBurnSubmissions.amountAtomic}), 0)`,
+      feesAtomic: sql<number>`coalesce(sum(${bridgeBurnSubmissions.appFeeAtomic}), 0)`,
     })
     .from(bridgeBurnSubmissions)
-    .where(sql`${bridgeBurnSubmissions.submittedAt} >= ${since}`);
+    .where(sql`${bridgeBurnSubmissions.submittedAt} >= ${since}`)
+    .groupBy(bridgeBurnSubmissions.sourceChainId, bridgeBurnSubmissions.transferType);
 
-  return {
-    totalVolumeAtomic: summary?.totalVolumeAtomic ?? 0,
-    fastVolumeAtomic: summary?.fastVolumeAtomic ?? 0,
-    standardVolumeAtomic: summary?.standardVolumeAtomic ?? 0,
-    totalFeesAtomic: summary?.totalFeesAtomic ?? 0,
-    fastFeesAtomic: summary?.fastFeesAtomic ?? 0,
-    supportFeesAtomic: summary?.supportFeesAtomic ?? 0,
-    totalBridges: summary?.totalBridges ?? 0,
-    fastBridges: summary?.fastBridges ?? 0,
-    standardBridges: summary?.standardBridges ?? 0,
-  };
+  const statistics = {
+    evm: createEmptyBridgeBurnCategoryStatistics(),
+    solana: createEmptyBridgeBurnCategoryStatistics(),
+  } satisfies BridgeBurnStatistics;
+
+  for (const row of rows) {
+    const category = row.sourceChainId.startsWith("Solana")
+      ? statistics.solana
+      : statistics.evm;
+    const eventCount = Number(row.eventCount);
+    const volumeAtomic = Number(row.volumeAtomic);
+    const feesAtomic = Number(row.feesAtomic);
+
+    category.totalBridges += eventCount;
+    category.totalVolumeAtomic += volumeAtomic;
+    category.totalFeesAtomic += feesAtomic;
+
+    if (row.transferType === "fast") {
+      category.fastBridges += eventCount;
+      category.fastVolumeAtomic += volumeAtomic;
+      category.fastFeesAtomic += feesAtomic;
+    } else {
+      category.standardBridges += eventCount;
+      category.standardVolumeAtomic += volumeAtomic;
+      category.supportFeesAtomic += feesAtomic;
+    }
+  }
+
+  return statistics;
 };
