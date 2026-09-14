@@ -48,22 +48,22 @@ const formatEntryDate = (date: string) =>
     timeZone: "UTC",
   }).format(new Date(`${date}T00:00:00.000Z`));
 
-export function ChangelogModal() {
+export function ChangelogModal({ navbar = false }: { navbar?: boolean }) {
   return (
     <Dialog>
       <DialogTrigger asChild>
         <Button
           variant="outline"
           size="sm"
-          className="bg-slate-800 border-slate-700 text-white hover:bg-slate-700/50 hover:text-white flex items-center gap-2 px-3"
+          className={navbar ? "h-[38px] border-transparent bg-transparent px-3 text-sm font-normal text-muted-foreground shadow-none hover:bg-transparent hover:text-foreground" : "bg-slate-800 border-slate-700 text-white hover:bg-slate-700/50 hover:text-white flex items-center gap-2 px-3"}
           aria-label="What's new"
         >
-          <Megaphone
+          {!navbar && <Megaphone
             className="size-4"
             data-icon="inline-start"
             aria-hidden="true"
-          />
-          <span className="hidden sm:inline">What&apos;s new</span>
+          />}
+          <span className={navbar ? "" : "hidden sm:inline"}>What&apos;s new</span>
         </Button>
       </DialogTrigger>
 

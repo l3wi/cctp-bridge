@@ -5,14 +5,15 @@ import { Button } from "../ui/button";
 
 type Props = {
   children?: React.ReactNode;
+  message?: string;
 };
 
 export default function ConnectGuard(props: Props) {
-  const { address, isConnected } = useAccount();
-  return <div>{isConnected ? props.children : <ConnectButton />}</div>;
+  const { isConnected } = useAccount();
+  return <div>{isConnected ? props.children : <ConnectButton message={props.message} />}</div>;
 }
 
-const ConnectButton: React.FC<{ smol?: boolean }> = ({ smol }) => {
+const ConnectButton: React.FC<{ message?: string }> = ({ message = "Connect Wallet" }) => {
   const { openConnectModal } = useConnectModal();
   return (
     <>
@@ -20,7 +21,7 @@ const ConnectButton: React.FC<{ smol?: boolean }> = ({ smol }) => {
         className="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-3"
         onClick={() => openConnectModal && openConnectModal()}
       >
-        Connect Wallet
+        {message}
       </Button>
     </>
   );

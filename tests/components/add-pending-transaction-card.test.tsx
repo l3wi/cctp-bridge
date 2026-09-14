@@ -117,7 +117,7 @@ describe("AddPendingTransactionCard", () => {
       />
     );
 
-    await user.click(screen.getByRole("button", { name: /add transaction/i }));
+    await user.click(screen.getByRole("button", { name: /find transfer/i }));
 
     await waitFor(() => {
       expect(addTransactionMock).toHaveBeenCalledTimes(1);
@@ -162,7 +162,7 @@ describe("AddPendingTransactionCard", () => {
       />
     );
 
-    await user.click(screen.getByRole("button", { name: /add transaction/i }));
+    await user.click(screen.getByRole("button", { name: /find transfer/i }));
 
     expect(await screen.findByText(/does not match the recipient encoded/i)).toBeTruthy();
     expect(addTransactionMock).not.toHaveBeenCalled();
@@ -171,7 +171,7 @@ describe("AddPendingTransactionCard", () => {
       screen.getByLabelText(/recipient solana wallet/i),
       recipientWallet.toBase58()
     );
-    await user.click(screen.getByRole("button", { name: /add transaction/i }));
+    await user.click(screen.getByRole("button", { name: /find transfer/i }));
 
     await waitFor(() => {
       expect(addTransactionMock).toHaveBeenCalledTimes(1);
@@ -211,7 +211,7 @@ describe("AddPendingTransactionCard", () => {
       />
     );
 
-    await user.click(screen.getByRole("button", { name: /add transaction/i }));
+    await user.click(screen.getByRole("button", { name: /find transfer/i }));
 
     expect(
       await screen.findByText(/No Circle CCTP v2 message was found for Ethereum Sepolia testnet, CCTP domain 0/i)
@@ -247,7 +247,7 @@ describe("AddPendingTransactionCard", () => {
       />
     );
 
-    await user.click(screen.getByRole("button", { name: /add transaction/i }));
+    await user.click(screen.getByRole("button", { name: /find transfer/i }));
 
     expect(await screen.findByText(/CCTP nonce/i)).toBeTruthy();
     expect(screen.getByText(/source burn transaction hash/i)).toBeTruthy();

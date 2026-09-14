@@ -1323,7 +1323,7 @@ export function BridgeCard({
     ]
   );
 
-  // Render the bridge comparison table (desktop) and cards (mobile)
+  // Render the selected transfer quote and its single action.
   const renderBridgeComparison = () => {
     const fastLabels = resolveEstimateLabels(TransferSpeed.FAST, fastEstimate, isFastEstimating);
     const standardLabels = resolveEstimateLabels(TransferSpeed.SLOW, standardEstimate, isStandardEstimating);
@@ -1358,9 +1358,9 @@ export function BridgeCard({
       );
 
       return sourceChainType === "solana" ? (
-        <SolanaConnectGuard>{button}</SolanaConnectGuard>
+        <SolanaConnectGuard message={speed === TransferSpeed.FAST ? "Connect Solana wallet to bridge fast" : "Connect Solana wallet to bridge"}>{button}</SolanaConnectGuard>
       ) : (
-        <ConnectGuard>{button}</ConnectGuard>
+        <ConnectGuard message={speed === TransferSpeed.FAST ? "Connect wallet to bridge fast" : "Connect wallet to bridge"}>{button}</ConnectGuard>
       );
     };
 
@@ -1368,6 +1368,9 @@ export function BridgeCard({
       <>
         <BridgeComparison
           fastTransferSupported={fastTransferSupported}
+          selectedSpeed={activeTransferSpeed}
+          onSpeedChange={setActiveTransferSpeed}
+          disabled={isLoading || isBridgeLoading || isSwitchingChain}
           fastLabels={fastLabels}
           standardLabels={standardLabels}
           renderButton={renderButton}
@@ -1580,11 +1583,11 @@ export function BridgeCard({
 
   return (
     <>
-      <Card className="bg-gradient-to-br from-slate-800/95 via-slate-800/98 to-slate-900/100 backdrop-blur-sm border-slate-700/50 text-white">
-        <CardContent className="p-4 md:p-6 space-y-4">
+      <Card className="mx-auto w-full max-w-[580px] rounded-2xl border-slate-700 bg-slate-800 text-white shadow-xl shadow-slate-950/10">
+        <CardContent className="p-4 sm:p-5 space-y-4">
           {/* Chain Selectors */}
-          <div className="flex items-center gap-3 md:flex-row flex-col">
-            <div className="w-full md:flex-1">
+          <div className="flex items-center gap-3 sm:flex-row flex-col">
+            <div className="w-full min-w-0 sm:flex-1">
               <Label className="text-sm text-slate-300 mb-2 block">From</Label>
               {showChainLoader ? (
                 <ChainSelectorSkeleton />
@@ -1649,13 +1652,13 @@ export function BridgeCard({
               )}
             </div>
 
-            <div className="justify-center pt-6 hidden md:flex">
+            <div className="justify-center pt-6 hidden sm:flex">
               <div className="rounded-full bg-slate-700/50 border border-slate-600 h-8 w-8 flex items-center justify-center">
                 <ArrowRight className="h-4 w-4 text-slate-400" />
               </div>
             </div>
 
-            <div className="w-full md:flex-1">
+            <div className="w-full min-w-0 sm:flex-1">
               <Label className="text-sm text-slate-300 mb-2 block">To</Label>
               {showChainLoader ? (
                 <ChainSelectorSkeleton />
@@ -1748,7 +1751,7 @@ export function BridgeCard({
                 value={amount?.str || ""}
                 onChange={(e) => handleAmountChange(e.target.value)}
                 className="bg-transparent border-none text-2xl font-semibold p-0 h-auto focus:outline-none focus-visible:ring-0 focus-visible:ring-offset-0 flex-1"
-                placeholder="0.0"
+                placeholder="0.00"
                 disabled={isLoading}
               />
               <span className="text-lg text-slate-400">USDC</span>
@@ -1832,7 +1835,7 @@ export function BridgeCard({
             </div>
           )}
 
-          {/* Transfer Options - Comparison Table */}
+          {/* Transfer type and live quote */}
           {renderBridgeComparison()}
         </CardContent>
       </Card>

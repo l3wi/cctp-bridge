@@ -9,7 +9,7 @@ import { TokenIcon } from "@web3icons/react/dynamic";
  * Solana wallet connection button component.
  * Shows "Connect Solana" when disconnected, truncated address when connected.
  */
-export function SolanaWalletConnect() {
+export function SolanaWalletConnect({ navbar = false }: { navbar?: boolean }) {
   const { publicKey, disconnect, connected, connecting } = useWallet();
   const { setVisible } = useWalletModal();
 
@@ -18,11 +18,11 @@ export function SolanaWalletConnect() {
       <Button
         onClick={() => setVisible(true)}
         variant="outline"
-        className="bg-purple-800/50 border-purple-600/50 text-white hover:bg-purple-700/50 hover:border-purple-500/50"
+        className={navbar ? "h-[42px] rounded-lg border-border bg-card px-4 text-sm font-normal text-foreground hover:bg-secondary" : "bg-purple-800/50 border-purple-600/50 text-white hover:bg-purple-700/50 hover:border-purple-500/50"}
         disabled={connecting}
       >
-        <TokenIcon symbol="SOL" variant="mono" className="h-5 w-5 mr-2" />
-        {connecting ? "Connecting..." : "Connect"}
+        {!navbar && <TokenIcon symbol="SOL" variant="mono" className="h-5 w-5 mr-2" />}
+        {connecting ? "Connecting..." : navbar ? "Connect Solana" : "Connect"}
       </Button>
     );
   }
@@ -36,10 +36,10 @@ export function SolanaWalletConnect() {
     <Button
       onClick={() => disconnect()}
       variant="outline"
-      className="bg-purple-800/50 border-purple-600/50 text-white hover:bg-purple-700/50 hover:border-purple-500/50"
+      className={navbar ? "h-[42px] rounded-lg border-border bg-card px-4 text-sm font-normal text-foreground hover:bg-secondary" : "bg-purple-800/50 border-purple-600/50 text-white hover:bg-purple-700/50 hover:border-purple-500/50"}
       title={publicKey?.toBase58()}
     >
-      <TokenIcon symbol="SOL" variant="mono" className="h-5 w-5 mr-2" />
+      {!navbar && <TokenIcon symbol="SOL" variant="mono" className="h-5 w-5 mr-2" />}
       {displayAddress}
     </Button>
   );

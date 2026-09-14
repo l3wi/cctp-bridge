@@ -496,13 +496,13 @@ export function BridgingState({
   if (displayResult) {
     const stateLabel =
       hasBurnFailed || burnPollingFailed || displayResult.state === "error"
-        ? "Bridge Failed"
+        ? "Transfer failed"
         : displayResult.state === "success"
-          ? "Bridge Completed"
+          ? "Transfer completed"
           : pendingTitle;
 
     return (
-      <Card className="bg-gradient-to-br from-slate-800/95 via-slate-800/98 to-slate-900/100 backdrop-blur-sm border-slate-700/50 text-white">
+      <Card className="rounded-[14px] border-border bg-card text-card-foreground">
         <CardContent className="p-6 space-y-6">
           <div className="flex items-center justify-between">
             <h2 className="text-xl font-semibold">{stateLabel}</h2>
@@ -567,7 +567,7 @@ export function BridgingState({
 
   // RENDER: Without bridge result (waiting state)
   return (
-    <Card className="bg-gradient-to-br from-slate-800/95 via-slate-800/98 to-slate-900/100 backdrop-blur-sm border-slate-700/50 text-white">
+    <Card className="rounded-[14px] border-border bg-card text-card-foreground">
       <CardContent className="p-6 space-y-8">
         <div className="flex items-center justify-between">
           <h2 className="text-xl font-semibold">{pendingTitle}</h2>

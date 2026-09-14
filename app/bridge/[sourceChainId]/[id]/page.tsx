@@ -1,3 +1,4 @@
+import { TrackingHelp } from "@/components/tracking-help";
 import { after } from "next/server";
 import { BridgePageShell } from "@/components/bridge-page-shell";
 import BridgeTrackingPageClient from "./bridge-tracking-page-client";
@@ -23,8 +24,11 @@ export default async function BridgeTrackingPage({
   });
 
   return (
-    <BridgePageShell>
+    <main className="cctp-theme min-h-screen bg-background text-foreground">
+    <BridgePageShell tracking progress>
       <BridgeTrackingPageClient sourceParam={sourceChainId} idParam={id} />
     </BridgePageShell>
+    <TrackingHelp />
+    </main>
   );
 }

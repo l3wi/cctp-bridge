@@ -212,11 +212,10 @@ describe("BridgeCard recipient lock integration", () => {
     const initialRecipient = mockState.solanaRecipient;
     expect(initialRecipient).toBeTruthy();
 
-    await user.type(screen.getByPlaceholderText("0.0"), "1");
-    const bridgeFastButtons = screen.getAllByRole("button", {
-      name: "Bridge Fast",
-    });
-    await user.click(bridgeFastButtons[0]);
+    await user.type(screen.getByPlaceholderText("0.00"), "1");
+    expect(screen.getByRole("button", { name: "Fast" }).getAttribute("aria-pressed")).toBe("true");
+    expect(screen.queryByRole("button", { name: "Bridge Standard" })).toBeNull();
+    await user.click(screen.getByRole("button", { name: "Bridge Fast" }));
 
     // Simulate wallet account swap after submit click
     mockState.solanaRecipient = "H2WfW7Lq2n7e1GvSLjY8qfM4Ad7D2yMkgw3o2DFT8nEA";
@@ -233,8 +232,9 @@ describe("BridgeCard recipient lock integration", () => {
     const user = userEvent.setup();
     render(<BridgeCard />);
 
-    await user.type(screen.getByPlaceholderText("0.0"), "100000");
-    await user.click(screen.getAllByRole("button", { name: "Bridge Standard" })[0]);
+    await user.type(screen.getByPlaceholderText("0.00"), "100000");
+    await user.click(screen.getByRole("button", { name: "Standard" }));
+    await user.click(screen.getByRole("button", { name: "Bridge Standard" }));
 
     expect(screen.getByRole("heading", { name: "Consider Supporting CCTP.io" })).toBeTruthy();
     expect(screen.getByText("15.00 USDC")).toBeTruthy();
@@ -258,8 +258,9 @@ describe("BridgeCard recipient lock integration", () => {
     const submitIntentMock = vi.fn();
     render(<BridgeCard mode="intentOnly" onSubmitIntent={submitIntentMock} />);
 
-    await user.type(screen.getByPlaceholderText("0.0"), "100000");
-    await user.click(screen.getAllByRole("button", { name: "Bridge Standard" })[0]);
+    await user.type(screen.getByPlaceholderText("0.00"), "100000");
+    await user.click(screen.getByRole("button", { name: "Standard" }));
+    await user.click(screen.getByRole("button", { name: "Bridge Standard" }));
 
     await waitFor(() => expect(submitIntentMock).toHaveBeenCalledTimes(1));
     expect(submitIntentMock).toHaveBeenCalledWith(
@@ -276,8 +277,9 @@ describe("BridgeCard recipient lock integration", () => {
     const user = userEvent.setup();
     render(<BridgeCard />);
 
-    await user.type(screen.getByPlaceholderText("0.0"), "100000");
-    await user.click(screen.getAllByRole("button", { name: "Bridge Standard" })[0]);
+    await user.type(screen.getByPlaceholderText("0.00"), "100000");
+    await user.click(screen.getByRole("button", { name: "Standard" }));
+    await user.click(screen.getByRole("button", { name: "Bridge Standard" }));
     await user.click(screen.getByRole("button", { name: "Bridge without contributing" }));
 
     await waitFor(() => expect(bridgeMock).toHaveBeenCalledTimes(1));
@@ -295,7 +297,7 @@ describe("BridgeCard recipient lock integration", () => {
     mockState.solanaRecipient = undefined;
     const { rerender } = render(<BridgeCard />);
 
-    await user.type(screen.getByPlaceholderText("0.0"), "1");
+    await user.type(screen.getByPlaceholderText("0.00"), "1");
 
     // Manual entry while no destination wallet is connected
     const manualInput = screen.getByPlaceholderText("Solana address...");
@@ -306,10 +308,9 @@ describe("BridgeCard recipient lock integration", () => {
     mockState.solanaRecipient = "6fL8jMZg4hJmK2f7gA9wq3pX5rU1vTy3nBk8zQeR4LmP";
     rerender(<BridgeCard />);
 
-    const bridgeFastButtons = screen.getAllByRole("button", {
-      name: "Bridge Fast",
-    });
-    await user.click(bridgeFastButtons[0]);
+    expect(screen.getByRole("button", { name: "Fast" }).getAttribute("aria-pressed")).toBe("true");
+    expect(screen.queryByRole("button", { name: "Bridge Standard" })).toBeNull();
+    await user.click(screen.getByRole("button", { name: "Bridge Fast" }));
 
     await waitFor(() => expect(bridgeMock).toHaveBeenCalledTimes(1));
     const bridgeParams = bridgeMock.mock.calls[0][0] as { targetAddress?: string };

@@ -20,9 +20,6 @@ export default function BridgeAddPageClient() {
       initialSourceChainId={prefill.sourceChainId}
       initialTxHash={prefill.txHash}
       initialError={prefill.error}
-      onBack={() => {
-        router.push("/");
-      }}
       onTransactionAdded={({ sourceChainId, routeId }) => {
         router.replace(buildBridgeRoute(sourceChainId, routeId));
       }}

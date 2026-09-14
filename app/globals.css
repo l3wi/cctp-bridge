@@ -4,7 +4,7 @@
 
 @variant dark (&:is(.dark *));
 
-@theme {
+@theme inline {
   --color-background: hsl(var(--background));
   --color-foreground: hsl(var(--foreground));
 
@@ -32,6 +32,10 @@
   --color-border: hsl(var(--border));
   --color-input: hsl(var(--input));
   --color-ring: hsl(var(--ring));
+  --color-surface: hsl(var(--surface));
+  --color-link: hsl(var(--link));
+  --color-docs-link: hsl(var(--link));
+  --color-divider: hsl(var(--divider));
 
   --color-chart-1: hsl(var(--chart-1));
   --color-chart-2: hsl(var(--chart-2));
@@ -51,6 +55,45 @@
   --radius-lg: var(--radius);
   --radius-md: calc(var(--radius) - 2px);
   --radius-sm: calc(var(--radius) - 4px);
+}
+
+/* The approved bridge and documentation palette, scoped away from tracking. */
+.cctp-theme {
+  --background: 218 46% 12%;
+  --foreground: 215 67% 96%;
+  --card: 217 39% 17%;
+  --card-foreground: 215 67% 96%;
+  --popover: 217 39% 17%;
+  --popover-foreground: 215 67% 96%;
+  --primary: 220 91% 55%;
+  --primary-foreground: 0 0% 100%;
+  --secondary: 216 35% 21%;
+  --secondary-foreground: 215 67% 96%;
+  --muted: 216 35% 21%;
+  --muted-foreground: 215 27% 71%;
+  --accent: 216 35% 25%;
+  --accent-foreground: 215 67% 96%;
+  --border: 218 27% 28%;
+  --input: 217 48% 13%;
+  --ring: 219 100% 78%;
+  --surface: 216 45% 13%;
+  --link: 219 100% 78%;
+  --divider: 215 26% 39%;
+  --sidebar-background: 216 45% 12%;
+  --sidebar-foreground: 215 27% 71%;
+  --sidebar-primary: 219 100% 78%;
+  --sidebar-primary-foreground: 215 67% 96%;
+  --sidebar-accent: 217 44% 23%;
+  --sidebar-accent-foreground: 219 100% 78%;
+  --sidebar-border: 218 27% 28%;
+  --sidebar-ring: 219 100% 78%;
+  font-family: var(--font-geist-sans), Arial, Helvetica, sans-serif;
+  color-scheme: dark;
+}
+
+.cctp-theme :is(a, button, summary):focus-visible {
+  outline: 2px solid hsl(var(--ring));
+  outline-offset: 4px;
 }
 
 /*
@@ -260,5 +303,18 @@
 
   .animate-gradient-float {
     animation: gradient-float 25s ease-in-out infinite;
+  }
+}
+
+@theme {
+  --animate-accordion-down: accordion-down 0.2s ease-out;
+  --animate-accordion-up: accordion-up 0.2s ease-out;
+  @keyframes accordion-down {
+    from { height: 0; }
+    to { height: var(--radix-accordion-content-height); }
+  }
+  @keyframes accordion-up {
+    from { height: var(--radix-accordion-content-height); }
+    to { height: 0; }
   }
 }

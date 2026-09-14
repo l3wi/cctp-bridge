@@ -1,8 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { AlertTriangle, ArrowLeft, Loader2 } from "lucide-react";
-import { useAccount } from "wagmi";
 import { useWallet } from "@solana/wallet-adapter-react";
 import type { BridgeResult } from "@circle-fin/bridge-kit";
 import { Button } from "@/components/ui/button";
@@ -49,6 +48,7 @@ interface AddPendingTransactionCardProps {
   initialTxHash?: string;
   initialError?: string | null;
   onBack?: () => void;
+  headerAction?: ReactNode;
   onTransactionAdded?: (payload: {
     sourceChainId: ChainId;
     routeId: string;
@@ -135,6 +135,7 @@ export function AddPendingTransactionCard({
   initialTxHash = "",
   initialError = null,
   onBack,
+  headerAction,
   onTransactionAdded,
 }: AddPendingTransactionCardProps) {
   const [selectedChainId, setSelectedChainId] = useState<ChainId | null>(
@@ -155,7 +156,6 @@ export function AddPendingTransactionCard({
   } | null>(null);
 
   const { transactions, addTransaction } = useTransactionStore();
-  const { address: evmAddress } = useAccount();
   const { publicKey: solanaPublicKey } = useWallet();
 
   useEffect(() => {
@@ -441,31 +441,28 @@ export function AddPendingTransactionCard({
   };
 
   return (
-    <Card className="bg-gradient-to-br from-slate-800/95 via-slate-800/98 to-slate-900/100 backdrop-blur-sm border-slate-700/50 text-white">
-      <CardContent className="p-6 space-y-4">
-        <div className="space-y-1">
+    <Card className="w-full max-w-[580px] rounded-2xl border-border bg-card text-card-foreground shadow-xl shadow-background/20">
+      <CardContent className="space-y-6 p-5 sm:p-6">
+        {(onBack || headerAction) && (
           <div className="flex items-center gap-2">
             {onBack && (
               <Button
                 type="button"
                 variant="ghost"
                 size="icon"
-                className="h-8 w-8 hover:bg-slate-700"
+                className="h-8 w-8 hover:bg-accent"
                 onClick={onBack}
                 aria-label="Back to Bridge Form"
               >
                 <ArrowLeft className="h-4 w-4" />
               </Button>
             )}
-            <h2 className="text-lg font-semibold">Add Pending Transaction</h2>
+            <div className="ml-auto">{headerAction}</div>
           </div>
-          <p className="text-sm text-slate-400">
-            Paste a source chain and burn transaction hash to recover an in-progress bridge.
-          </p>
-        </div>
+        )}
 
         <form
-          className="space-y-4"
+          className="space-y-5"
           onSubmit={(event) => {
             event.preventDefault();
             setWalletMismatchWarning(null);
@@ -473,7 +470,7 @@ export function AddPendingTransactionCard({
           }}
         >
           <div className="space-y-2">
-            <label className="text-sm font-medium text-slate-300">Source Chain</label>
+            <label htmlFor="pending-source-network" className="text-sm font-medium text-foreground">Source network</label>
             <Select
               value={
                 selectedChainId !== null
@@ -491,8 +488,8 @@ export function AddPendingTransactionCard({
                 setError(null);
               }}
             >
-              <SelectTrigger className="bg-slate-700/50 border-slate-600 text-white">
-                <SelectValue placeholder="Select Chain...">
+              <SelectTrigger id="pending-source-network" aria-describedby="pending-source-help" className="h-12 rounded-xl border-border bg-secondary text-foreground">
+                <SelectValue placeholder="Select source network">
                   {selectedChainId !== null &&
                     (() => {
                       const selected = supportedChains.find((chain) => {
@@ -527,7 +524,7 @@ export function AddPendingTransactionCard({
                     })()}
                 </SelectValue>
               </SelectTrigger>
-              <SelectContent className="bg-slate-800 border-slate-700">
+              <SelectContent className="cctp-theme border-border bg-popover text-popover-foreground">
                 {supportedChains.map((chain) => {
                   const chainSelectId = getChainSelectId(chain);
                   const chainIdForIcon: ChainId =
@@ -539,7 +536,7 @@ export function AddPendingTransactionCard({
                     <SelectItem
                       key={chainSelectId}
                       value={chainSelectId}
-                      className="text-white hover:bg-slate-700"
+                      className="text-foreground focus:bg-accent focus:text-foreground"
                     >
                       <div className="flex items-center gap-2">
                         <ChainIcon chainId={chainIdForIcon} size={24} />
@@ -550,12 +547,21 @@ export function AddPendingTransactionCard({
                 })}
               </SelectContent>
             </Select>
+            <p id="pending-source-help" className="text-xs leading-relaxed text-muted-foreground">
+              The network you sent USDC from.
+            </p>
           </div>
 
           <div className="space-y-2">
-            <label className="text-sm font-medium text-slate-300">Transaction Hash</label>
+            <label htmlFor="pending-source-transaction" className="text-sm font-medium text-foreground">
+              {isSolanaSelected ? "Source transaction signature" : "Source transaction hash"}
+            </label>
             <input
+              id="pending-source-transaction"
               type="text"
+              autoComplete="off"
+              spellCheck={false}
+              aria-describedby="pending-transaction-help"
               placeholder={
                 isSolanaSelected
                   ? "Enter Solana signature (e.g., 2bX4P87La...)"
@@ -570,12 +576,12 @@ export function AddPendingTransactionCard({
                 setCachedAttestation(null);
                 setError(null);
               }}
-              className="w-full px-3 py-2 bg-slate-900 border border-slate-600 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:border-blue-500"
+              className="min-h-12 w-full rounded-xl border border-border bg-input px-3 py-3 text-sm text-foreground placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             />
-            <p className="text-xs text-slate-400">
+            <p id="pending-transaction-help" className="text-xs leading-relaxed text-muted-foreground">
               {isSolanaSelected
-                ? "Enter the Solana transaction signature (Base58 format)"
-                : "Enter the burn transaction hash from the source chain (0x...)"}
+                ? "Copy the source transaction signature from your wallet or Solana explorer."
+                : "Copy the source transaction hash from your wallet or block explorer."}
             </p>
           </div>
 
@@ -583,7 +589,7 @@ export function AddPendingTransactionCard({
             <div className="space-y-2">
               <label
                 htmlFor="pending-solana-recipient"
-                className="text-sm font-medium text-slate-300"
+                className="text-sm font-medium text-foreground"
               >
                 Recipient Solana Wallet
               </label>
@@ -596,9 +602,9 @@ export function AddPendingTransactionCard({
                   setSolanaRecipientAddress(event.target.value);
                   setError(null);
                 }}
-                className="w-full px-3 py-2 bg-slate-900 border border-slate-600 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:border-blue-500"
+                className="min-h-12 w-full rounded-xl border border-border bg-input px-3 py-3 text-sm text-foreground placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               />
-              <p className="text-xs text-slate-400">
+              <p className="text-xs text-muted-foreground">
                 Helpers may pay Solana fees and ATA rent, but USDC is minted only to
                 the recipient account encoded by Circle.
               </p>
@@ -606,13 +612,13 @@ export function AddPendingTransactionCard({
           )}
 
           {error && (
-            <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-lg">
+            <div role="alert" className="rounded-xl border border-red-500/20 bg-red-500/10 p-3">
               <p className="text-sm text-red-400">{error}</p>
             </div>
           )}
 
           {walletMismatchWarning && (
-            <div className="p-3 bg-yellow-500/10 border border-yellow-500/20 rounded-lg">
+            <div role="alert" className="rounded-xl border border-yellow-500/20 bg-yellow-500/10 p-3">
               <div className="flex items-start gap-2">
                 <AlertTriangle className="h-4 w-4 text-yellow-400 mt-0.5 flex-shrink-0" />
                 <p className="text-sm text-yellow-400">{walletMismatchWarning}</p>
@@ -623,24 +629,20 @@ export function AddPendingTransactionCard({
           <Button
             type="submit"
             disabled={!selectedChainId || !txHash || isLoading}
-            className="w-full bg-blue-600 hover:bg-blue-700 text-white"
+            className="h-12 w-full rounded-xl bg-primary text-primary-foreground hover:bg-primary/90"
           >
             {isLoading ? (
               <>
                 <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                Looking up transaction...
+                Finding transfer...
               </>
             ) : (
-              "Add Transaction"
+              "Find transfer"
             )}
           </Button>
         </form>
 
-        {!evmAddress && !solanaPublicKey && (
-          <p className="text-xs text-slate-500">
-            Connect your destination wallet to verify recipient ownership before claiming.
-          </p>
-        )}
+
       </CardContent>
     </Card>
   );

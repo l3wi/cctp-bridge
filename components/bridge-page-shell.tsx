@@ -1,13 +1,47 @@
+import { SiteHeader } from "@/components/site-header";
 import type { ReactNode } from "react";
+import Link from "next/link";
 import AnimatedBackground from "@/components/animated-bg";
 import { BridgeContentBoundary } from "@/components/bridge-content-boundary";
 import { BridgeShellActions } from "@/components/bridge-shell-actions";
 
 interface BridgePageShellProps {
   children: ReactNode;
+  homepage?: boolean;
+  tracking?: boolean;
+  history?: boolean;
+  progress?: boolean;
 }
 
-export function BridgePageShell({ children }: BridgePageShellProps) {
+export function BridgePageShell({ children, homepage = false, tracking = false, history = false, progress = false }: BridgePageShellProps) {
+  if (homepage || tracking || history) {
+    return (
+      <section className="flex min-h-svh flex-col" aria-label={tracking ? "Track a transfer" : "USDC bridge"}>
+        <SiteHeader active={homepage ? "bridge" : history || progress ? "history" : "find"} />
+        <div className="flex flex-1 flex-col items-center justify-center gap-[18px] px-4 pt-6 pb-12">
+          <div className="space-y-2.5 text-center">
+            <h1 className="text-4xl leading-[42px] font-semibold tracking-[-0.045em]">{history ? "Transfer history" : progress ? "Your transfer" : tracking ? "Find transfer" : "CCTP Bridge"}</h1>
+            <p className="text-[15px] leading-6 text-muted-foreground">{history ? "Your recent USDC transfers, all in one place." : progress ? "Follow your USDC from source to destination." : tracking ? "Look up a CCTP transfer with its source network and transaction hash." : "Native USDC. EVM ↔ Solana. Powered by Circle CCTP."}</p>
+          </div>
+          <div className="w-full max-w-[580px]">
+            <BridgeContentBoundary>{children}</BridgeContentBoundary>
+          </div>
+          <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-2 text-sm text-muted-foreground sm:gap-x-6">
+            {homepage && (
+              <>
+                <span>Native USDC on arrival</span>
+                <span aria-hidden="true" className="text-divider">/</span>
+              </>
+            )}
+            <Link href={tracking || history ? "/" : "/bridge"} className="transition-colors hover:text-foreground">{tracking || history ? "New transfer ↗" : "Find transfer ↗"}</Link>
+            <span aria-hidden="true" className="text-divider">/</span>
+            <Link href={tracking || history ? "/docs/recover" : "/docs/fees"} className="transition-colors hover:text-foreground">{tracking || history ? "Recovery guide ↗" : "Fee Details ↗"}</Link>
+          </div>
+        </div>
+      </section>
+    );
+  }
+
   return (
     <AnimatedBackground>
       <BridgeShellActions />

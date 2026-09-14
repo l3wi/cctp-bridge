@@ -5,7 +5,7 @@ import { useDisconnect } from "wagmi";
 import { Button } from "@/components/ui/button";
 import { NetworkIcon } from "@web3icons/react/dynamic";
 
-export function WalletConnect() {
+export function WalletConnect({ navbar = false }: { navbar?: boolean }) {
   const { disconnect } = useDisconnect();
 
   return (
@@ -41,10 +41,10 @@ export function WalletConnect() {
                   <Button
                     onClick={openConnectModal}
                     variant="outline"
-                    className="bg-slate-800/50 border-slate-700 text-white hover:bg-slate-700/50"
+                    className={navbar ? "h-[42px] rounded-lg border-border bg-card px-4 text-sm font-normal text-foreground hover:bg-secondary" : "bg-slate-800/50 border-slate-700 text-white hover:bg-slate-700/50"}
                   >
-                    <NetworkIcon chainId={1} variant="mono" className="h-5 w-5 mr-2" />
-                    Connect
+                    {!navbar && <NetworkIcon chainId={1} variant="mono" className="h-5 w-5 mr-2" />}
+                    {navbar ? "Connect EVM" : "Connect"}
                   </Button>
                 );
               }
@@ -58,9 +58,9 @@ export function WalletConnect() {
                 <Button
                   onClick={() => disconnect()}
                   variant="outline"
-                  className="bg-slate-800/50 border-slate-700 text-white hover:bg-slate-700/50"
+                  className={navbar ? "h-[42px] rounded-lg border-border bg-card px-4 text-sm font-normal text-foreground hover:bg-secondary" : "bg-slate-800/50 border-slate-700 text-white hover:bg-slate-700/50"}
                 >
-                  <NetworkIcon chainId={1} variant="mono" className="h-5 w-5 mr-2" />
+                  {!navbar && <NetworkIcon chainId={1} variant="mono" className="h-5 w-5 mr-2" />}
                   {displayName}
                 </Button>
               );
