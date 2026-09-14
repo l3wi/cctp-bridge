@@ -69,3 +69,7 @@ Fast tx fees are charged only for fast transfers and are included in the entered
 - `bun run build` runs `metadata:refresh` automatically via `prebuild`.
 
 See `CLAUDE.md` for detailed architecture documentation.
+
+## Public pages and SEO
+
+The homepage and `/docs` guides use canonical URLs on `https://www.cctp.io` and are listed in `/sitemap.xml`. Transfer lookup, transaction detail, history, and the HTML image preview are noindex utilities. See [search indexing architecture](docs/architecture/seo.md) and the [Search Console research](docs/tasks/seo-research-2026-09-14.md) for policy and rollout priorities.

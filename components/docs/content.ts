@@ -19,10 +19,11 @@ export const docsNavigation = [
     ...routeGuides.map((route) => ({ label: `${route.source} → ${route.destination}`, href: `/docs/routes/${route.slug}` })),
   ] },
   { title: "Help", links: [
+    { label: "About CCTP.io and support", href: "/docs/about" },
     { label: "Track or resume a transfer", href: "/docs/recover" },
     { label: "Common questions", href: "/docs/recover#questions" },
   ] },
 ];
 export function docsMetadata(title: string, description: string, path: string): Metadata {
-  return { title: `${title} | CCTP Bridge`, description, alternates: { canonical: `${docsOrigin}${path}` }, openGraph: { title: `${title} | CCTP Bridge`, description, url: `${docsOrigin}${path}`, type: "article" } };
+  return { title: `${title} | CCTP Bridge`, description, alternates: { canonical: `${docsOrigin}${path}` }, openGraph: { title: `${title} | CCTP Bridge`, description, url: `${docsOrigin}${path}`, siteName: "CCTP.io", images: [{ url: `${docsOrigin}/og.png`, width: 1000, height: 525, alt: "CCTP Bridge" }], type: "article" } };
 }

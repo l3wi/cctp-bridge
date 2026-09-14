@@ -274,3 +274,11 @@ Public sources below were accessed on 14 September 2026; pages without publicati
 [^11]: Google Search Central, [Core Web Vitals and Search](https://developers.google.com/search/docs/appearance/core-web-vitals).
 [^12]: Google Search Central, [Documentation updates](https://developers.google.com/search/updates), May and June 2026 FAQ feature deprecation/removal entries.
 [^13]: Google Search Central, [AI features and your website](https://developers.google.com/search/docs/appearance/ai-features).
+
+## Implementation follow-up — 14 September 2026
+
+Applied the homepage title candidate while retaining the CCTP Bridge H1; added the homepage self-canonical, www metadata base/social URLs, WebSite identity markup, robots discovery, and utility noindex layouts. Guide metadata keeps per-page canonicals and explicit sharing images. Sitemap membership remains editorial-only and includes the new About/support guide; no synthetic freshness dates are emitted. Malformed tracking paths use the existing source/hash/nonce validation before notFound.
+
+Expanded the existing fees, recovery and directional route content using the current implementation, including optional Standard contributions and Solana recipient/account constraints. Retained the four already-approved route guides without generating further routes. Homepage route discovery now links to the route index.
+
+Still separate rollout work: deploy and verify production host redirects and rendered responses; submit/inspect the sitemap in Search Console; compare matched 28-day query cohorts; measure field Core Web Vitals and landing-to-verified-mint conversion. No deployment, external outreach, Search Console change, or claimed ranking gain is part of this code update. Safe chains-only route preselection and additional route expansion remain subsequent product work.

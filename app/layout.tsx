@@ -8,21 +8,24 @@ import type { Metadata } from "next";
 export const metadata: Metadata = {
   applicationName: "CCTP Bridge",
   title: "Bridge USDC across EVM & Solana via CCTP",
+  twitter: { card: "summary_large_image", images: ["https://www.cctp.io/og.png"] },
   openGraph: {
+    siteName: "CCTP.io",
+    type: "website",
     title: "CCTP Bridge — Bridge USDC across EVM & Solana",
     description:
       "Bridge USDC natively across Ethereum, Arbitrum, Base, Optimism, Polygon, Avalanche, and Solana using Circle's CCTP v2 infrastructure.",
     images: [
       {
-        url: "https://cctp.io/og.png",
+        url: "https://www.cctp.io/og.png",
         width: 1000,
         height: 525,
-        alt: "CCTP Bridge — Now with Solana!",
+        alt: "CCTP Bridge — Bridge native USDC across EVM and Solana",
       },
     ],
   },
   description:
-    "Bridge USDC natively across EVM chains and Solana using Circle's CCTP v2 infrastructure. Fast, secure, and trustless.",
+    "Bridge USDC natively across EVM chains and Solana using Circle's CCTP v2 infrastructure. Compare Fast and Standard transfers, review fees, and find or resume a transfer.",
   keywords: [
     "USDC",
     "CCTP",
@@ -38,7 +41,7 @@ export const metadata: Metadata = {
     "Avalanche",
     "Cross-chain",
   ],
-  metadataBase: new URL("https://cctp.io"),
+  metadataBase: new URL("https://www.cctp.io"),
 };
 
 const geistSans = Geist({

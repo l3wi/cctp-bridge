@@ -31,7 +31,7 @@ export function HomepageContent() {
                   {network.name}
                 </span>
               ))}
-              <Link href="/docs/routes/ethereum-to-base" className={`${linkClass} px-2 py-2.5`}>Route guides ↗</Link>
+              <Link href="/docs/routes" className={`${linkClass} px-2 py-2.5`}>Route guides ↗</Link>
             </div>
           </section>
           <section aria-label="Frequently asked questions">
