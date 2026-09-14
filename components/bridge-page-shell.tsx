@@ -1,3 +1,4 @@
+import { ArrowUpRight } from "lucide-react";
 import { SiteHeader } from "@/components/site-header";
 import type { ReactNode } from "react";
 import Link from "next/link";
@@ -33,9 +34,9 @@ export function BridgePageShell({ children, homepage = false, tracking = false, 
                 <span aria-hidden="true" className="text-divider">/</span>
               </>
             )}
-            <Link href={tracking || history ? "/" : "/bridge"} className="transition-colors hover:text-foreground">{tracking || history ? "New transfer ↗" : "Find transfer ↗"}</Link>
+            <Link href={tracking || history ? "/" : "/bridge"} className="inline-flex items-center gap-1 transition-colors hover:text-foreground">{tracking || history ? "New transfer" : "Find transfer"}<ArrowUpRight className="size-3.5 shrink-0" aria-hidden="true" /></Link>
             <span aria-hidden="true" className="text-divider">/</span>
-            <Link href={tracking || history ? "/docs/recover" : "/docs/fees"} className="transition-colors hover:text-foreground">{tracking || history ? "Recovery guide ↗" : "Fee Details ↗"}</Link>
+            <Link href={tracking || history ? "/docs/recover" : "/docs/fees"} className="inline-flex items-center gap-1 transition-colors hover:text-foreground">{tracking || history ? "Recovery guide" : "Fee Details"}<ArrowUpRight className="size-3.5 shrink-0" aria-hidden="true" /></Link>
           </div>
         </div>
       </section>

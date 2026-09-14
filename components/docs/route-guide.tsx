@@ -1,3 +1,4 @@
+import { ArrowUpRight } from "lucide-react";
 import { ChainIcon } from "@/components/chain-icon";
 import Link from "next/link";
 import { DocsArticle, docLinkClass } from "./docs-article";
@@ -12,7 +13,7 @@ export function RouteGuideArticle({ route }: { route: RouteGuide }) {
   ]}>
     <div className="space-y-6 rounded-[10px] border border-border bg-card p-6">
       <div className="flex flex-wrap items-center gap-4 text-xl">{[{ name: route.source, icon: route.sourceIcon }, { name: route.destination, icon: route.destinationIcon }].map((chain, index) => <span key={chain.name} className="flex items-center gap-3">{index === 1 && <span aria-hidden className="mr-1 text-muted-foreground">→</span>}<ChainIcon chainId={chain.icon === "solana" ? "Solana" : Number(chain.icon)} size={28} />{chain.name}</span>)}</div>
-      <div className="flex flex-col justify-between gap-5 sm:flex-row sm:items-center"><p className="text-sm leading-6 text-muted-foreground">Native USDC → Native USDC<br />Review timing and fees in the live quote.</p><Link href="/" className="shrink-0 rounded-lg bg-primary px-5 py-3 text-center text-sm font-semibold text-primary-foreground hover:bg-primary/90">Open bridge ↗</Link></div>
+      <div className="flex flex-col justify-between gap-5 sm:flex-row sm:items-center"><p className="text-sm leading-6 text-muted-foreground">Native USDC → Native USDC<br />Review timing and fees in the live quote.</p><Link href="/" className="shrink-0 rounded-lg bg-primary px-5 py-3 text-center text-sm font-semibold text-primary-foreground hover:bg-primary/90">Open bridge <ArrowUpRight className="inline-block size-3.5 align-text-bottom" aria-hidden="true" /></Link></div>
     </div>
   </DocsArticle>;
 }

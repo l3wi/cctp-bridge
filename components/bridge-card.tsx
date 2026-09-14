@@ -1584,7 +1584,7 @@ export function BridgeCard({
   return (
     <>
       <Card className="mx-auto w-full max-w-[580px] rounded-2xl border-slate-700 bg-slate-800 text-white shadow-xl shadow-slate-950/10">
-        <CardContent className="p-4 sm:p-5 space-y-4">
+        <CardContent className="p-4 space-y-3">
           {/* Chain Selectors */}
           <div className="flex items-center gap-3 sm:flex-row flex-col">
             <div className="w-full min-w-0 sm:flex-1">
@@ -1724,7 +1724,7 @@ export function BridgeCard({
           </div>
 
           {/* Amount Input */}
-          <div className="bg-slate-900/50 rounded-lg px-4 py-3">
+          <div className="bg-slate-900/50 rounded-lg px-3 py-2.5">
             <div className="flex justify-between items-center mb-2">
               <Label className="text-sm text-slate-300">Amount</Label>
               <div className="flex items-center gap-2">

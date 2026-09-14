@@ -33,7 +33,7 @@ export function BridgeComparison({
   ];
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex min-w-0 flex-col gap-0.5">
             <span className="text-sm leading-5 text-slate-300">Transfer type</span>
@@ -67,7 +67,7 @@ export function BridgeComparison({
       </div>
       <dl className="divide-y divide-slate-700">
         {rows.map(([label, value]) => (
-          <div key={label} className="flex items-start justify-between gap-4 py-2.5 text-sm">
+          <div key={label} className="flex items-start justify-between gap-4 py-2 text-sm">
             <dt className="text-slate-400">{label}</dt>
             <dd className="text-right font-medium text-slate-100">{value}</dd>
           </div>

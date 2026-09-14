@@ -1,5 +1,7 @@
 "use client";
 
+import { ArrowUpRight } from "lucide-react";
+
 import Link from "next/link";
 import { useTransactionStore } from "@/lib/store/transactionStore";
 import { buildBridgeRoute, getTransactionShareId } from "@/lib/bridgeRoute";
@@ -45,7 +47,7 @@ export function TransferHistory() {
             <Button variant="outline" asChild><Link href="/bridge">Find a transfer</Link></Button>
           </div>
         )}
-        {sorted.length > 0 && <Link href="/bridge" className="text-sm text-link hover:underline">Missing a transfer? Find it using a transaction hash ↗</Link>}
+        {sorted.length > 0 && <Link href="/bridge" className="text-sm text-link hover:underline">Missing a transfer? Find it using a transaction hash <ArrowUpRight className="inline-block size-3.5 align-text-bottom" aria-hidden="true" /></Link>}
       </CardContent>
     </Card>
   );

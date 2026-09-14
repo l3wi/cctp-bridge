@@ -1,3 +1,4 @@
+import { ArrowUpRight } from "lucide-react";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import Link from "next/link";
 
@@ -16,7 +17,7 @@ export function TrackingHelp() {
         <div className="mx-auto max-w-[968px] px-6 py-12">
           <div className="mb-8 flex flex-wrap items-center justify-between gap-4">
             <h2 id="tracking-help-heading" className="text-[22px] font-semibold tracking-tight">Help with your transfer</h2>
-            <Link href="/docs/recover" className="text-sm text-link hover:underline">Read the recovery guide ↗</Link>
+            <Link href="/docs/recover" className="text-sm text-link hover:underline">Read the recovery guide <ArrowUpRight className="inline-block size-3.5 align-text-bottom" aria-hidden="true" /></Link>
           </div>
           <Accordion type="single" collapsible defaultValue="faq-0">
           {questions.map(([question, answer], index) => (
@@ -39,8 +40,8 @@ export function TrackingHelp() {
           <p>made by lewi · Independent interface for Circle CCTP</p>
           <nav aria-label="Footer navigation" className="flex gap-5">
             <Link href="/" className="hover:text-foreground">Bridge</Link>
-            <Link href="/docs/how-it-works" className="hover:text-foreground">Docs ↗</Link>
-            <a href="https://t.me/twpks" target="_blank" rel="noopener noreferrer" className="hover:text-foreground">Support ↗</a>
+            <Link href="/docs/how-it-works" className="hover:text-foreground">Docs <ArrowUpRight className="inline-block size-3.5 align-text-bottom" aria-hidden="true" /></Link>
+            <a href="https://t.me/twpks" target="_blank" rel="noopener noreferrer" className="hover:text-foreground">Support <ArrowUpRight className="inline-block size-3.5 align-text-bottom" aria-hidden="true" /></a>
           </nav>
         </div>
       </footer>

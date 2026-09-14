@@ -4,7 +4,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 export function BridgeCardSkeleton() {
   return (
     <Card className="mx-auto w-full max-w-[580px] rounded-2xl border-slate-700 bg-slate-800 text-white shadow-xl shadow-slate-950/10">
-      <CardContent className="space-y-4 p-4 sm:p-5">
+      <CardContent className="space-y-3 p-4">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
           <div className="w-full space-y-2 sm:flex-1">
             <Skeleton className="h-4 w-14 bg-slate-700/80" />
@@ -17,7 +17,7 @@ export function BridgeCardSkeleton() {
           </div>
         </div>
 
-        <div className="rounded-lg bg-slate-900/50 px-4 py-3">
+        <div className="rounded-lg bg-slate-900/50 px-3 py-2.5">
           <div className="mb-3 flex items-center justify-between">
             <Skeleton className="h-4 w-16 bg-slate-700/80" />
             <Skeleton className="h-4 w-28 bg-slate-700/80" />
@@ -35,7 +35,7 @@ export function BridgeCardSkeleton() {
         <Skeleton className="h-4 w-64 max-w-full bg-slate-700/80" />
         <div className="divide-y divide-slate-700">
           {[0, 1, 2, 3].map((row) => (
-            <div key={row} className="flex justify-between py-2.5">
+            <div key={row} className="flex justify-between py-2">
               <Skeleton className="h-5 w-28 bg-slate-700/80" />
               <Skeleton className="h-5 w-16 bg-slate-700/80" />
             </div>

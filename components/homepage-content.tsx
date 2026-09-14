@@ -1,3 +1,4 @@
+import { ArrowUpRight } from "lucide-react";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import Image from "next/image";
 import Link from "next/link";
@@ -19,7 +20,7 @@ export function HomepageContent() {
           <section aria-labelledby="native-usdc-heading" className="space-y-7 pb-9">
             <div className="flex flex-wrap items-center justify-between gap-4">
               <h2 id="native-usdc-heading" className="text-[22px] leading-7 font-semibold tracking-tight">Bridge native USDC across chains</h2>
-              <Link href="/docs/how-it-works" className={linkClass}>How it works ↗</Link>
+              <Link href="/docs/how-it-works" className={linkClass}>How it works <ArrowUpRight className="inline-block size-3.5 align-text-bottom" aria-hidden="true" /></Link>
             </div>
             <p className="text-[15px] leading-[25px] text-muted-foreground">
               CCTP burns USDC on the source network and mints native USDC on the destination after Circle verifies the transfer. Use supported EVM networks or Solana, with no wrapped USDC on arrival.
@@ -31,7 +32,7 @@ export function HomepageContent() {
                   {network.name}
                 </span>
               ))}
-              <Link href="/docs/routes" className={`${linkClass} px-2 py-2.5`}>Route guides ↗</Link>
+              <Link href="/docs/routes" className={`${linkClass} px-2 py-2.5`}>Route guides <ArrowUpRight className="inline-block size-3.5 align-text-bottom" aria-hidden="true" /></Link>
             </div>
           </section>
           <section aria-label="Frequently asked questions">
@@ -45,7 +46,7 @@ export function HomepageContent() {
               <AccordionContent>
               <div className="mt-3 space-y-3 sm:pr-16">
                 <p className="text-sm leading-6 text-muted-foreground">Standard waits for the required chain confirmations. Fast offers earlier attestation on eligible routes for a fee. Compare the estimate above, including the amount you’ll receive. Gas is separate.</p>
-                <Link href="/docs/fees" className={linkClass}>Fees and transfer times ↗</Link>
+                <Link href="/docs/fees" className={linkClass}>Fees and transfer times <ArrowUpRight className="inline-block size-3.5 align-text-bottom" aria-hidden="true" /></Link>
               </div>
             </AccordionContent>
             </AccordionItem>
@@ -78,9 +79,9 @@ export function HomepageContent() {
           <p>made by lewi · Independent interface for Circle CCTP</p>
           <nav aria-label="Footer navigation" className="flex flex-wrap gap-5">
             <Link href="/docs/how-it-works" className="hover:text-foreground">About</Link>
-            <a href="https://t.me/twpks" target="_blank" rel="noopener noreferrer" className="hover:text-foreground">Support ↗</a>
-            <Link href="/docs/how-it-works" className="hover:text-foreground">Docs ↗</Link>
-            <a href="https://x.com/lewifree" target="_blank" rel="noopener noreferrer" className="hover:text-foreground">X ↗</a>
+            <a href="https://t.me/twpks" target="_blank" rel="noopener noreferrer" className="hover:text-foreground">Support <ArrowUpRight className="inline-block size-3.5 align-text-bottom" aria-hidden="true" /></a>
+            <Link href="/docs/how-it-works" className="hover:text-foreground">Docs <ArrowUpRight className="inline-block size-3.5 align-text-bottom" aria-hidden="true" /></Link>
+            <a href="https://x.com/lewifree" target="_blank" rel="noopener noreferrer" className="hover:text-foreground">X <ArrowUpRight className="inline-block size-3.5 align-text-bottom" aria-hidden="true" /></a>
           </nav>
         </div>
       </footer>
