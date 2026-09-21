@@ -3,7 +3,8 @@
  * Handles both EVM and Solana source chains with consistent interface.
  */
 
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { useStandardFeeConfirmation } from "@/components/bridge-card/StandardFeeConfirmation";
 import { useAccount, useWalletClient } from "wagmi";
 import { useWallet } from "@solana/wallet-adapter-react";
 import { useToast } from "@/components/ui/use-toast";
@@ -12,7 +13,7 @@ import { createEvmPublicClient, createSolanaConnection } from "@/lib/rpc/clients
 import type { BurnParams, BurnResult, ChainId, SolanaChainId, EvmTxHash } from "../types";
 import { isSolanaChain } from "../types";
 import { handleBurnError } from "../errors";
-import { getCctpDomain, getCctpDomainSafe, FINALITY_THRESHOLDS } from "../shared";
+import { getCctpDomain, getCctpDomainSafe, FINALITY_THRESHOLDS, isUserRejection } from "../shared";
 
 /** Callbacks for burn progress updates - exported for useCrossEcosystemBridge */
 export interface BurnProgressCallbacks {
@@ -32,6 +33,8 @@ import {
   prepareEvmBurn,
 } from "../evm/burn";
 import { getFastTransferFeeQuote } from "../fastTransferFee";
+import { standardFeeMessage, type StandardFeeReservation, type StandardFeeRequest } from "../cumulativeFee";
+import { previewStandardFeeClient, reserveStandardFeeClient, updateStandardFeeClient, recoverStandardFee, saveStandardFee, clearStandardFee } from "../standardFeeClient";
 
 // Solana burn utilities
 import {
@@ -55,12 +58,20 @@ function assertWalletOnSourceChain(
  * Automatically routes to EVM or Solana implementation based on source chain.
  */
 export function useBurn() {
+  const confirmStandardFee = useStandardFeeConfirmation();
   // EVM wallet state
   const { address: evmAddress } = useAccount();
   const { data: walletClient } = useWalletClient();
 
   // Solana wallet state
   const solanaWallet = useWallet();
+  const currentWallets = useRef({ evmAddress, solanaAddress: solanaWallet.publicKey?.toBase58(), mounted: true });
+  currentWallets.current.evmAddress = evmAddress;
+  currentWallets.current.solanaAddress = solanaWallet.publicKey?.toBase58();
+  useEffect(() => {
+    currentWallets.current.mounted = true;
+    return () => { currentWallets.current.mounted = false; };
+  }, []);
 
   const { toast } = useToast();
   const [isBurning, setIsBurning] = useState(false);
@@ -69,7 +80,7 @@ export function useBurn() {
    * Execute a burn on EVM chain.
    */
   const executeEvmBurn = useCallback(
-    async (params: BurnParams, callbacks?: BurnProgressCallbacks): Promise<BurnResult> => {
+    async (params: BurnParams, callbacks?: BurnProgressCallbacks, beforeBroadcast?: () => Promise<void>, onRejected?: () => Promise<void>): Promise<BurnResult> => {
       const sourceChainId = params.sourceChainId as number;
 
       // Validate wallet connection
@@ -237,6 +248,7 @@ export function useBurn() {
 	              });
 
         assertWalletOnSourceChain(walletClient.chain?.id, sourceChainId);
+        await beforeBroadcast?.();
         const burnTxHash = await walletClient.sendTransaction({
           to: burnData.to,
           data: burnData.data,
@@ -263,6 +275,7 @@ export function useBurn() {
 	          appFeeRecipient: burnConfig.appFeeRecipient,
 	        };
       } catch (error) {
+        if (isUserRejection(error)) await onRejected?.();
         return handleBurnError(error, "burn");
       }
     },
@@ -273,7 +286,7 @@ export function useBurn() {
    * Execute a burn on Solana chain.
    */
   const executeSolanaBurn = useCallback(
-    async (params: BurnParams): Promise<BurnResult> => {
+    async (params: BurnParams, beforeBroadcast?: () => Promise<void>): Promise<BurnResult> => {
       const sourceChainId = params.sourceChainId as SolanaChainId;
 
       // Validate wallet connection
@@ -378,6 +391,7 @@ export function useBurn() {
         signedTx.partialSign(messageAccount);
 
         // Send WITHOUT waiting for confirmation
+        await beforeBroadcast?.();
         const signature = await sendTransactionNoConfirm(connection, signedTx);
 
         // Success
@@ -410,18 +424,70 @@ export function useBurn() {
   const executeBurn = useCallback(
     async (params: BurnParams, callbacks?: BurnProgressCallbacks): Promise<BurnResult> => {
       setIsBurning(true);
-
+      let reservation: StandardFeeReservation | undefined;
+      let broadcasting = false;
+      const address = isSolanaChain(params.sourceChainId) ? solanaWallet.publicKey?.toBase58() : evmAddress;
       try {
-        if (isSolanaChain(params.sourceChainId)) {
-          return await executeSolanaBurn(params);
-        } else {
-          return await executeEvmBurn(params, callbacks);
+        if (params.transferSpeed === "standard") {
+          if (!address) throw new Error("Connect your wallet to check the Standard fee");
+          await recoverStandardFee(address);
+          const preview = await previewStandardFeeClient({ address, sourceChainId: params.sourceChainId, amountAtomic: params.amount.toString() });
+          if (preview.chargeFee && !await confirmStandardFee({ ...preview, amountAtomic: params.amount.toString() })) {
+            throw Object.assign(new Error("User rejected fee confirmation"), { code: 4001 });
+          }
+          const currentAddress = isSolanaChain(params.sourceChainId) ? currentWallets.current.solanaAddress : currentWallets.current.evmAddress;
+          if (!currentWallets.current.mounted || currentAddress !== address) throw new Error("Wallet changed. Please restart the bridge.");
+          const request: StandardFeeRequest = {
+            requestId: crypto.randomUUID(), address, sourceChainId: params.sourceChainId,
+            amountAtomic: params.amount.toString(), issuedAt: Date.now(),
+          };
+          const message = standardFeeMessage(request);
+          toast({ title: "Prepare Standard bridge", description: "Sign the message to verify your wallet and prepare this bridge." });
+          let signature: string;
+          if (isSolanaChain(params.sourceChainId)) {
+            if (!solanaWallet.signMessage) throw new Error("This wallet must support message signing for Standard bridges");
+            signature = btoa(String.fromCharCode(...await solanaWallet.signMessage(new TextEncoder().encode(message))));
+          } else {
+            if (!walletClient) throw new Error("Wallet client not available");
+            signature = await walletClient.signMessage({ account: address as `0x${string}`, message });
+          }
+          reservation = await reserveStandardFeeClient(request, signature);
+          saveStandardFee(address, reservation);
+          const fee = reservation.chargeFee ? BigInt(reservation.feeAtomic) : 0n;
+          if (fee !== BigInt(preview.feeAtomic)) throw new Error("Your Standard fee changed. Please retry to review the updated amount.");
+          params = { ...params, appFeeAmount: fee, appFeeBps: Number(fee * 10_000_000n / params.amount) / 1_000, appFeeRecipient: reservation.recipient };
         }
+        const beforeBroadcast = reservation ? async () => {
+          // Treat an uncertain API response as broadcasting too: never release it blindly.
+          broadcasting = true;
+          await updateStandardFeeClient(reservation!, "broadcast");
+        } : undefined;
+        const result = isSolanaChain(params.sourceChainId)
+          ? await executeSolanaBurn(params, beforeBroadcast)
+          : await executeEvmBurn(params, callbacks, beforeBroadcast, async () => {
+            if (reservation && address) {
+              await updateStandardFeeClient(reservation, "rejected");
+              clearStandardFee(address);
+            }
+          });
+        if (reservation && address && result.burnTxHash) {
+          try { saveStandardFee(address, reservation, result.burnTxHash); } catch { console.warn("Could not persist fee recovery locally"); }
+          // Persist recovery information locally; reporting must not turn a sent burn into a failure.
+          void updateStandardFeeClient(reservation, "submit", result.burnTxHash).catch(() => {
+            console.warn("Standard fee submission will retry before the next bridge");
+          });
+        }
+        return result;
+      } catch (error) {
+        return handleBurnError(error, "burn");
       } finally {
+        if (reservation && address && !broadcasting) {
+          try { await updateStandardFeeClient(reservation, "cancel"); clearStandardFee(address); } catch { /* Keep the reservation for recovery. */ }
+        }
         setIsBurning(false);
       }
     },
-    [executeEvmBurn, executeSolanaBurn]
+    [executeEvmBurn, executeSolanaBurn, evmAddress, walletClient, solanaWallet, toast, confirmStandardFee]
   );
 
   return {

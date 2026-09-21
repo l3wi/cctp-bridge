@@ -6,6 +6,8 @@ import { useBurnPolling } from "@/lib/hooks/useBurnPolling";
 
 const getTransactionReceiptMock = vi.hoisted(() => vi.fn());
 const createEvmPublicClientMock = vi.hoisted(() => vi.fn());
+const notifyFeeReceiptMock = vi.hoisted(() => vi.fn());
+vi.mock("@/lib/cctp/standardFeeClient", () => ({ notifyStandardFeeReceipt: notifyFeeReceiptMock }));
 
 vi.mock("wagmi", () => ({
   useWalletClient: () => ({
@@ -21,6 +23,7 @@ vi.mock("@/lib/rpc/clients", () => ({
 describe("useBurnPolling", () => {
   beforeEach(() => {
     vi.useFakeTimers();
+    notifyFeeReceiptMock.mockReset().mockResolvedValue(undefined);
     getTransactionReceiptMock.mockReset();
     createEvmPublicClientMock.mockReset();
     createEvmPublicClientMock.mockReturnValue({
@@ -53,6 +56,7 @@ describe("useBurnPolling", () => {
     expect(result.current.failed).toBe(false);
     expect(result.current.error).toContain("taking longer than expected");
     expect(onBurnFailed).not.toHaveBeenCalled();
+    expect(notifyFeeReceiptMock).not.toHaveBeenCalled();
   });
 
   it("marks burn as failed when chain reports a revert", async () => {
@@ -75,9 +79,12 @@ describe("useBurnPolling", () => {
     expect(result.current.timedOut).toBe(false);
     expect(result.current.error).toContain("reverted");
     expect(onBurnFailed).toHaveBeenCalledTimes(1);
+    expect(notifyFeeReceiptMock).toHaveBeenCalledWith(`0x${"2".repeat(64)}`);
   });
 
   it("marks burn as confirmed when chain reports success", async () => {
+    // Ledger notification must not hold up bridge progress.
+    notifyFeeReceiptMock.mockReturnValue(new Promise(() => {}));
     const onBurnConfirmed = vi.fn();
     getTransactionReceiptMock.mockResolvedValue({ status: "success" });
 
@@ -96,5 +103,6 @@ describe("useBurnPolling", () => {
     expect(result.current.confirmed).toBe(true);
     expect(result.current.failed).toBe(false);
     expect(onBurnConfirmed).toHaveBeenCalledTimes(1);
+    expect(notifyFeeReceiptMock).toHaveBeenCalledWith(`0x${"3".repeat(64)}`);
   });
 });

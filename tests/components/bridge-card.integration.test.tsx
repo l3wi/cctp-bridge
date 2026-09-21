@@ -116,15 +116,6 @@ vi.mock("@/lib/cctp/estimate", () => ({
   estimateBridgeFee: vi.fn(),
 }));
 
-vi.mock("@/lib/cctp/fastTransferFee", () => ({
-  getStandardTransferSupportQuote: ({ amount }: { amount: bigint }) => ({
-    eligible: amount >= 100_000_000_000n,
-    feeAmount: 15_000_000n,
-    feeBps: 1.5,
-    recipient: "0x1111111111111111111111111111111111111111",
-    config: { enabled: true, feeBps: 4 },
-  }),
-}));
 
 vi.mock("@tanstack/react-query", () => ({
   useQuery: () => ({
@@ -228,7 +219,7 @@ describe("BridgeCard recipient lock integration", () => {
     expect(bridgeParams.targetAddress).not.toBe(mockState.solanaRecipient);
   });
 
-  it("offers an optional contribution before a large standard transfer", async () => {
+  it("starts Standard transfers without an optional contribution popup", async () => {
     const user = userEvent.setup();
     render(<BridgeCard />);
 
@@ -236,24 +227,18 @@ describe("BridgeCard recipient lock integration", () => {
     await user.click(screen.getByRole("button", { name: "Standard" }));
     await user.click(screen.getByRole("button", { name: "Bridge Standard" }));
 
-    expect(screen.getByRole("heading", { name: "Consider Supporting CCTP.io" })).toBeTruthy();
-    expect(screen.getByText("15.00 USDC")).toBeTruthy();
-    expect(bridgeMock).not.toHaveBeenCalled();
-
-    await user.click(screen.getByRole("button", { name: "Bridge with contribution" }));
+    expect(screen.queryByRole("heading", { name: "Consider Supporting CCTP.io" })).toBeNull();
 
     await waitFor(() => expect(bridgeMock).toHaveBeenCalledTimes(1));
     expect(bridgeMock).toHaveBeenCalledWith(
       expect.objectContaining({
         transferType: "standard",
-        appFeeAmount: 15_000_000n,
-        appFeeBps: 1.5,
       }),
       expect.anything()
     );
   });
 
-  it("carries the support prompt through the intent flow before execution", async () => {
+  it("carries Standard intent without optional contribution state", async () => {
     const user = userEvent.setup();
     const submitIntentMock = vi.fn();
     render(<BridgeCard mode="intentOnly" onSubmitIntent={submitIntentMock} />);
@@ -266,30 +251,10 @@ describe("BridgeCard recipient lock integration", () => {
     expect(submitIntentMock).toHaveBeenCalledWith(
       expect.objectContaining({
         transferType: "standard",
-        showStandardSupportPrompt: true,
       })
     );
     expect(bridgeMock).not.toHaveBeenCalled();
     expect(screen.queryByRole("heading", { name: "Consider Supporting CCTP.io" })).toBeNull();
-  });
-
-  it("continues a large standard transfer without a contribution when declined", async () => {
-    const user = userEvent.setup();
-    render(<BridgeCard />);
-
-    await user.type(screen.getByPlaceholderText("0.00"), "100000");
-    await user.click(screen.getByRole("button", { name: "Standard" }));
-    await user.click(screen.getByRole("button", { name: "Bridge Standard" }));
-    await user.click(screen.getByRole("button", { name: "Bridge without contributing" }));
-
-    await waitFor(() => expect(bridgeMock).toHaveBeenCalledTimes(1));
-    expect(bridgeMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        transferType: "standard",
-        appFeeAmount: undefined,
-      }),
-      expect.anything()
-    );
   });
 
   it("uses newly connected destination wallet instead of stale manual input for cross-ecosystem", async () => {
@@ -382,7 +347,7 @@ describe("BridgeCard execute intent integration", () => {
     consoleErrorSpy.mockRestore();
   });
 
-  it("shows the support prompt before executing a marked large standard intent", async () => {
+  it("executes large Standard intents without an optional prompt", async () => {
     const user = userEvent.setup();
     render(
       <BridgeCard
@@ -391,23 +356,15 @@ describe("BridgeCard execute intent integration", () => {
           ...baseIntent,
           amount: "100000",
           transferType: "standard",
-          showStandardSupportPrompt: true,
         }}
       />
     );
 
-    await waitFor(() => {
-      expect(screen.getByRole("heading", { name: "Consider Supporting CCTP.io" })).toBeTruthy();
-    });
-    expect(bridgeMock).not.toHaveBeenCalled();
-
-    await user.click(screen.getByRole("button", { name: "Bridge with contribution" }));
 
     await waitFor(() => expect(bridgeMock).toHaveBeenCalledTimes(1));
     expect(bridgeMock).toHaveBeenCalledWith(
       expect.objectContaining({
         transferType: "standard",
-        appFeeAmount: 15_000_000n,
       }),
       expect.anything()
     );

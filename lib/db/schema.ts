@@ -60,3 +60,29 @@ export const bridgeBurnSubmissions = sqliteTable(
 
 export type BridgeBurnSubmission = typeof bridgeBurnSubmissions.$inferSelect;
 export type NewBridgeBurnSubmission = typeof bridgeBurnSubmissions.$inferInsert;
+
+// Separate from best-effort analytics: only verified burns advance these balances.
+export const standardFeeAccounts = sqliteTable("standard_fee_accounts", {
+  address: text("address").primaryKey(),
+  volumeAtomic: integer("volume_atomic").notNull().default(0),
+  nextThresholdAtomic: integer("next_threshold_atomic").notNull().default(1_000_000_000_000),
+  feesPaidAtomic: integer("fees_paid_atomic").notNull().default(0),
+  activeReservationId: text("active_reservation_id"),
+});
+
+export const standardFeeReservations = sqliteTable("standard_fee_reservations", {
+  id: text("id").primaryKey(),
+  token: text("token").notNull(),
+  address: text("address").notNull(),
+  sourceChainId: text("source_chain_id").notNull(),
+  amountAtomic: integer("amount_atomic").notNull(),
+  feeAtomic: integer("fee_atomic").notNull(),
+  recipient: text("recipient").notNull(),
+  nextThresholdAtomic: integer("next_threshold_atomic").notNull(),
+  status: text("status", { enum: ["reserved", "broadcasting", "submitted", "confirmed", "cancelled", "failed"] }).notNull(),
+  burnHash: text("burn_hash"),
+  createdAt: integer("created_at").notNull(),
+}, (table) => [
+  uniqueIndex("standard_fee_burn_idx").on(table.sourceChainId, table.burnHash),
+  index("standard_fee_account_idx").on(table.address, table.status),
+]);

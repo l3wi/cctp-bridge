@@ -1,0 +1,321 @@
+{
+  "version": "6",
+  "dialect": "sqlite",
+  "id": "d4c513b8-a5ef-49b8-8f89-e5afc672a0ae",
+  "prevId": "67c6703c-6ff1-4a8a-8fbd-c5a7afefebdc",
+  "tables": {
+    "bridge_burn_submissions": {
+      "name": "bridge_burn_submissions",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "burn_hash": {
+          "name": "burn_hash",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "source_chain_id": {
+          "name": "source_chain_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "target_chain_id": {
+          "name": "target_chain_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "from_address": {
+          "name": "from_address",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "to_address": {
+          "name": "to_address",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "transfer_type": {
+          "name": "transfer_type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "amount_atomic": {
+          "name": "amount_atomic",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "app_fee_atomic": {
+          "name": "app_fee_atomic",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "app_fee_bps": {
+          "name": "app_fee_bps",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "circle_fee_atomic": {
+          "name": "circle_fee_atomic",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "submitted_at": {
+          "name": "submitted_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "recorded_at": {
+          "name": "recorded_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "bridge_burn_submissions_chain_hash_idx": {
+          "name": "bridge_burn_submissions_chain_hash_idx",
+          "columns": [
+            "source_chain_id",
+            "burn_hash"
+          ],
+          "isUnique": true
+        },
+        "bridge_burn_submissions_submitted_at_idx": {
+          "name": "bridge_burn_submissions_submitted_at_idx",
+          "columns": [
+            "submitted_at"
+          ],
+          "isUnique": false
+        },
+        "bridge_burn_submissions_transfer_type_idx": {
+          "name": "bridge_burn_submissions_transfer_type_idx",
+          "columns": [
+            "transfer_type"
+          ],
+          "isUnique": false
+        },
+        "bridge_burn_submissions_statistics_idx": {
+          "name": "bridge_burn_submissions_statistics_idx",
+          "columns": [
+            "submitted_at",
+            "transfer_type",
+            "amount_atomic",
+            "app_fee_atomic"
+          ],
+          "isUnique": false
+        },
+        "bridge_burn_submissions_route_idx": {
+          "name": "bridge_burn_submissions_route_idx",
+          "columns": [
+            "source_chain_id",
+            "target_chain_id"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "bridge_burn_submissions_transfer_type_check": {
+          "name": "bridge_burn_submissions_transfer_type_check",
+          "value": "\"bridge_burn_submissions\".\"transfer_type\" in ('fast', 'standard')"
+        },
+        "bridge_burn_submissions_amounts_non_negative_check": {
+          "name": "bridge_burn_submissions_amounts_non_negative_check",
+          "value": "\"bridge_burn_submissions\".\"amount_atomic\" >= 0 and \"bridge_burn_submissions\".\"app_fee_atomic\" >= 0 and \"bridge_burn_submissions\".\"circle_fee_atomic\" >= 0"
+        }
+      }
+    },
+    "standard_fee_accounts": {
+      "name": "standard_fee_accounts",
+      "columns": {
+        "address": {
+          "name": "address",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "volume_atomic": {
+          "name": "volume_atomic",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        },
+        "next_threshold_atomic": {
+          "name": "next_threshold_atomic",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 1000000000000
+        },
+        "fees_paid_atomic": {
+          "name": "fees_paid_atomic",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        },
+        "active_reservation_id": {
+          "name": "active_reservation_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "standard_fee_reservations": {
+      "name": "standard_fee_reservations",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "token": {
+          "name": "token",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "address": {
+          "name": "address",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "source_chain_id": {
+          "name": "source_chain_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "amount_atomic": {
+          "name": "amount_atomic",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "fee_atomic": {
+          "name": "fee_atomic",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "recipient": {
+          "name": "recipient",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "next_threshold_atomic": {
+          "name": "next_threshold_atomic",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "burn_hash": {
+          "name": "burn_hash",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "standard_fee_burn_idx": {
+          "name": "standard_fee_burn_idx",
+          "columns": [
+            "source_chain_id",
+            "burn_hash"
+          ],
+          "isUnique": true
+        },
+        "standard_fee_account_idx": {
+          "name": "standard_fee_account_idx",
+          "columns": [
+            "address",
+            "status"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    }
+  },
+  "views": {},
+  "enums": {},
+  "_meta": {
+    "schemas": {},
+    "tables": {},
+    "columns": {}
+  },
+  "internal": {
+    "indexes": {}
+  }
+}

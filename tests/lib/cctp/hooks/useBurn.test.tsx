@@ -14,12 +14,29 @@ const createSolanaConnectionMock = vi.hoisted(() => vi.fn());
 const buildDepositForBurnTransactionMock = vi.hoisted(() => vi.fn());
 const sendSolanaTransactionNoConfirmMock = vi.hoisted(() => vi.fn());
 const signSolanaTransactionMock = vi.hoisted(() => vi.fn());
+const reserveFeeMock = vi.hoisted(() => vi.fn());
+const previewFeeMock = vi.hoisted(() => vi.fn());
+const confirmFeeMock = vi.hoisted(() => vi.fn());
+vi.mock("@/components/bridge-card/StandardFeeConfirmation", () => ({ useStandardFeeConfirmation: () => confirmFeeMock }));
+const updateFeeMock = vi.hoisted(() => vi.fn().mockResolvedValue({ ok: true }));
+vi.mock("@/lib/cctp/standardFeeClient", () => ({
+  reserveStandardFeeClient: reserveFeeMock,
+  previewStandardFeeClient: previewFeeMock,
+  updateStandardFeeClient: updateFeeMock,
+  recoverStandardFee: vi.fn(), saveStandardFee: vi.fn(), clearStandardFee: vi.fn(),
+}));
+beforeEach(() => {
+  previewFeeMock.mockReset().mockResolvedValue({ volumeAtomic: "0", chargeFee: false, feeAtomic: "0" });
+  confirmFeeMock.mockReset().mockResolvedValue(true);
+  reserveFeeMock.mockReset().mockResolvedValue({ id: "test", token: "token", chargeFee: false, feeAtomic: "0", recipient: "11111111111111111111111111111111" });
+});
 const walletClientState = vi.hoisted(() => ({
   current: undefined as
     | {
         account: { address: `0x${string}` };
         chain: { id: number };
         sendTransaction: typeof sendTransactionMock;
+        signMessage: () => Promise<string>;
         transport: { request: unknown };
       }
     | undefined,
@@ -28,6 +45,7 @@ const solanaWalletState = vi.hoisted(() => ({
   connected: false,
   publicKey: null as ReturnType<typeof Keypair.generate>["publicKey"] | null,
   signTransaction: undefined as typeof signSolanaTransactionMock | undefined,
+  signMessage: vi.fn().mockResolvedValue(new Uint8Array(64)),
 }));
 
 const createMockSolanaBurnResult = () => {
@@ -117,6 +135,7 @@ describe("useBurn EVM chain assertions", () => {
       account: { address: "0x1111111111111111111111111111111111111111" },
       chain: { id: 8453 },
       sendTransaction: sendTransactionMock,
+      signMessage: vi.fn().mockResolvedValue("0xsigned"),
       transport: { request: vi.fn() },
     };
     sendTransactionMock.mockResolvedValue(`0x${"a".repeat(64)}`);
@@ -277,6 +296,53 @@ describe("useBurn Solana finality and fast fee safety", () => {
     );
     expect(buildDepositForBurnTransactionMock).not.toHaveBeenCalled();
     expect(signSolanaTransactionMock).not.toHaveBeenCalled();
+    expect(sendSolanaTransactionNoConfirmMock).not.toHaveBeenCalled();
+  });
+
+  it("includes the API-approved cumulative fee in a Standard Solana burn", async () => {
+    previewFeeMock.mockResolvedValue({ volumeAtomic: "1000000000000", chargeFee: true, feeAtomic: "100000000" });
+    reserveFeeMock.mockResolvedValue({ id: "test", token: "token", chargeFee: true, feeAtomic: "100000000", recipient: "11111111111111111111111111111111" });
+    const { result } = renderHook(() => useBurn());
+    await act(async () => {
+      await result.current.executeBurn({ sourceChainId: "Solana_Devnet", destinationChainId: 84532, amount: 200_000_000n, recipientAddress: "0x5555555555555555555555555555555555555555", transferSpeed: "standard" });
+    });
+    expect(buildDepositForBurnTransactionMock).toHaveBeenCalledWith(expect.objectContaining({ amount: 100_000_000n, appFeeAmount: 100_000_000n }));
+    expect(updateFeeMock).toHaveBeenCalledWith(expect.anything(), "broadcast");
+    expect(updateFeeMock).toHaveBeenCalledWith(expect.anything(), "submit", "5Za4L7SolanaSignature");
+    expect(confirmFeeMock).toHaveBeenCalledWith({ volumeAtomic: "1000000000000", chargeFee: true, feeAtomic: "100000000", amountAtomic: "200000000" });
+  });
+
+  it("does not sign, reserve or send when the fee confirmation is cancelled", async () => {
+    previewFeeMock.mockResolvedValue({ volumeAtomic: "1000000000000", chargeFee: true, feeAtomic: "100000000" });
+    confirmFeeMock.mockResolvedValue(false);
+    solanaWalletState.signMessage.mockClear();
+    const { result } = renderHook(() => useBurn());
+    await act(async () => {
+      await result.current.executeBurn({ sourceChainId: "Solana_Devnet", destinationChainId: 84532, amount: 200_000_000n, recipientAddress: "0x5555555555555555555555555555555555555555", transferSpeed: "standard" });
+    });
+    expect(solanaWalletState.signMessage).not.toHaveBeenCalled();
+    expect(reserveFeeMock).not.toHaveBeenCalled();
+    expect(buildDepositForBurnTransactionMock).not.toHaveBeenCalled();
+    expect(sendSolanaTransactionNoConfirmMock).not.toHaveBeenCalled();
+  });
+
+  it("cancels a changed reservation instead of sending an unapproved fee", async () => {
+    reserveFeeMock.mockResolvedValue({ id: "test", token: "token", chargeFee: true, feeAtomic: "100000000", recipient: "11111111111111111111111111111111" });
+    const { result } = renderHook(() => useBurn());
+    await act(async () => {
+      await result.current.executeBurn({ sourceChainId: "Solana_Devnet", destinationChainId: 84532, amount: 200_000_000n, recipientAddress: "0x5555555555555555555555555555555555555555", transferSpeed: "standard" });
+    });
+    expect(updateFeeMock).toHaveBeenCalledWith(expect.anything(), "cancel");
+    expect(buildDepositForBurnTransactionMock).not.toHaveBeenCalled();
+  });
+
+  it("does not build or send a Standard burn when the fee API is unavailable", async () => {
+    reserveFeeMock.mockRejectedValue(new Error("Fee API unavailable"));
+    const { result } = renderHook(() => useBurn());
+    await act(async () => {
+      await result.current.executeBurn({ sourceChainId: "Solana_Devnet", destinationChainId: 84532, amount: 200_000_000n, recipientAddress: "0x5555555555555555555555555555555555555555", transferSpeed: "standard" });
+    });
+    expect(buildDepositForBurnTransactionMock).not.toHaveBeenCalled();
     expect(sendSolanaTransactionNoConfirmMock).not.toHaveBeenCalled();
   });
 

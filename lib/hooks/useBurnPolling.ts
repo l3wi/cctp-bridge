@@ -4,6 +4,13 @@ import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { useWalletClient } from "wagmi";
 import { ChainId, isSolanaChain } from "@/lib/types";
 import { createEvmPublicClient, createSolanaConnection } from "@/lib/rpc/clients";
+import { notifyStandardFeeReceipt } from "@/lib/cctp/standardFeeClient";
+
+const notifyFeeReceipt = (hash: string) => {
+  void notifyStandardFeeReceipt(hash).catch(() => {
+    console.warn("Fee receipt reconciliation will retry before the next Standard bridge");
+  });
+};
 
 // Polling configuration
 const POLL_INTERVAL_MS = 5_000; // Poll every 5 seconds
@@ -108,6 +115,7 @@ export function useBurnPolling({
       if (!isMountedRef.current) return;
 
       if (receipt) {
+        notifyFeeReceipt(burnTxHash);
         if (receipt.status === "success") {
           setState({
             confirmed: true,
@@ -166,6 +174,7 @@ export function useBurnPolling({
       if (!isMountedRef.current) return;
 
       if (status) {
+        if (status.err || status.confirmationStatus === "confirmed" || status.confirmationStatus === "finalized") notifyFeeReceipt(burnTxHash);
         if (status.err) {
           // Transaction failed
           const errorMsg = `Burn transaction failed: ${JSON.stringify(status.err)}`;

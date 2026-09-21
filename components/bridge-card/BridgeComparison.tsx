@@ -28,7 +28,7 @@ export function BridgeComparison({
   const rows = [
     ["Estimated time", labels.speedLabel],
     ["Confirmations", labels.confirmationLabel],
-    [isFast ? "Fast transfer fee" : "Transfer fee", labels.feeLabel],
+    ...(isFast ? [["Fast transfer fee", labels.feeLabel]] : []),
     ["You receive", labels.receiveLabel],
   ];
 

@@ -2,10 +2,6 @@ import { PublicKey } from "@solana/web3.js";
 import { isEvmAddress, type ChainId, type EvmAddress, type TransferSpeed } from "./types";
 
 const BPS_DENOMINATOR = 10_000n;
-export const STANDARD_TRANSFER_SUPPORT_MINIMUM_AMOUNT = 100_000_000_000n;
-export const STANDARD_TRANSFER_SUPPORT_MAXIMUM_AMOUNT = 1_000_000_000_000n;
-export const STANDARD_TRANSFER_SUPPORT_MINIMUM_FEE = 15_000_000n;
-export const STANDARD_TRANSFER_SUPPORT_MAXIMUM_FEE = 50_000_000n;
 
 export interface FastTransferFeeConfig {
   enabled: boolean;
@@ -21,9 +17,6 @@ export interface FastTransferFeeQuote {
   config: FastTransferFeeConfig;
 }
 
-export interface StandardTransferSupportQuote extends FastTransferFeeQuote {
-  eligible: boolean;
-}
 
 function parseFeeBps(value: string | undefined): number {
   if (!value?.trim()) return 0;
@@ -53,51 +46,6 @@ export function getFastTransferFeeConfig(): FastTransferFeeConfig {
     evmRecipient,
     solanaRecipient,
   };
-}
-
-export function getStandardTransferSupportQuote(params: {
-  amount: bigint;
-  sourceChainId: ChainId;
-}): StandardTransferSupportQuote {
-  const config = getFastTransferFeeConfig();
-  const recipient = typeof params.sourceChainId === "string"
-    ? config.solanaRecipient
-    : config.evmRecipient;
-  const eligible =
-    Boolean(recipient) &&
-    params.amount >= STANDARD_TRANSFER_SUPPORT_MINIMUM_AMOUNT;
-
-  return {
-    eligible,
-    feeAmount: eligible ? calculateStandardTransferSupportFeeAmount(params.amount) : 0n,
-    feeBps: eligible ? calculateEffectiveFeeBps(params.amount) : 0,
-    recipient: eligible ? recipient : undefined,
-    config,
-  };
-}
-
-export function calculateStandardTransferSupportFeeAmount(amount: bigint): bigint {
-  if (amount < STANDARD_TRANSFER_SUPPORT_MINIMUM_AMOUNT) return 0n;
-  if (amount >= STANDARD_TRANSFER_SUPPORT_MAXIMUM_AMOUNT) {
-    return STANDARD_TRANSFER_SUPPORT_MAXIMUM_FEE;
-  }
-
-  const amountRange =
-    STANDARD_TRANSFER_SUPPORT_MAXIMUM_AMOUNT - STANDARD_TRANSFER_SUPPORT_MINIMUM_AMOUNT;
-  const feeRange =
-    STANDARD_TRANSFER_SUPPORT_MAXIMUM_FEE - STANDARD_TRANSFER_SUPPORT_MINIMUM_FEE;
-
-  return (
-    STANDARD_TRANSFER_SUPPORT_MINIMUM_FEE +
-    ((amount - STANDARD_TRANSFER_SUPPORT_MINIMUM_AMOUNT) * feeRange) / amountRange
-  );
-}
-
-function calculateEffectiveFeeBps(amount: bigint): number {
-  const feeAmount = calculateStandardTransferSupportFeeAmount(amount);
-  if (feeAmount === 0n) return 0;
-
-  return Number((feeAmount * BPS_DENOMINATOR * 1_000n) / amount) / 1_000;
 }
 
 export function calculateFastTransferFeeAmount(amount: bigint, feeBps: number): bigint {

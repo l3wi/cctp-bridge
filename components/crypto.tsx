@@ -1,5 +1,7 @@
 "use client";
 
+import { StandardFeeConfirmationProvider } from "@/components/bridge-card/StandardFeeConfirmation";
+
 // Polyfill BigInt serialization for JSON.stringify
 // Required for Solana/Bridge Kit SDK which uses BigInt internally
 if (typeof BigInt !== "undefined" && !(BigInt.prototype as unknown as { toJSON?: unknown }).toJSON) {
@@ -122,7 +124,7 @@ export default function CryptoProviders({
       <QueryClientProvider client={queryClient}>
         <RainbowKitProvider>
           <SolanaProvider>
-            {children}
+            <StandardFeeConfirmationProvider>{children}</StandardFeeConfirmationProvider>
             <Toaster />
           </SolanaProvider>
         </RainbowKitProvider>
