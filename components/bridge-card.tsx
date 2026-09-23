@@ -84,6 +84,7 @@ interface BridgeCardProps {
   onBackToNew?: () => void;
   mode?: "full" | "intentOnly" | "executeIntent";
   initialIntent?: BridgeIntent | null;
+  initialChains?: { sourceChainId: ChainId; targetChainId: ChainId };
   onSubmitIntent?: (intent: BridgeSubmissionIntent) => void;
   onPendingHashResolved?: (payload: {
     sourceChainId: ChainId;
@@ -103,6 +104,7 @@ export function BridgeCard({
   onBackToNew,
   mode = "full",
   initialIntent,
+  initialChains,
   onSubmitIntent,
   onPendingHashResolved,
   onMessageExpiredNonce,
@@ -128,9 +130,11 @@ export function BridgeCard({
 
   // State
   const [sourceChainId, setSourceChainId] = useState<ChainId | null>(
-    () => chain?.id ?? null
+    () => initialChains?.sourceChainId ?? chain?.id ?? null
   );
-  const [targetChainId, setTargetChainId] = useState<ChainId | null>(null);
+  const [targetChainId, setTargetChainId] = useState<ChainId | null>(
+    () => initialChains?.targetChainId ?? null
+  );
   const [amount, setAmount] = useState<AmountState | null>(null);
   const [activeTransferSpeed, setActiveTransferSpeed] = useState<TransferSpeedValue>(
     TransferSpeed.FAST
@@ -338,13 +342,17 @@ export function BridgeCard({
   )?.id;
 
   // Track if user has explicitly changed the source chain
-  const userChangedSourceRef = useRef(false);
+  const userChangedSourceRef = useRef(Boolean(initialChains));
 
   // Sync source chain to wallet chain ONLY when wallet chain actually changes
   // Don't override if user explicitly selected a different chain (like Solana)
   useEffect(() => {
     const prevWalletChain = prevWalletChainRef.current;
     prevWalletChainRef.current = walletChainId;
+
+    // A route is an explicit source choice. Connecting a wallet on another
+    // network must not replace it; the source selector still switches normally.
+    if (initialChains) return;
 
     // Only sync if wallet chain changed (not on every sourceChainId change)
     if (walletChainId && walletChainId !== prevWalletChain && evmChainIds.has(walletChainId)) {
@@ -364,10 +372,15 @@ export function BridgeCard({
       // Ultimate fallback if no default available
       setSourceChainId(chainOptions[0].id);
     }
-  }, [walletChainId, evmChainIds, chainOptions, sourceChainId, defaultSourceChainId]);
+  }, [walletChainId, evmChainIds, chainOptions, sourceChainId, defaultSourceChainId, initialChains]);
 
   // Keep the destination list consistent with the selected source chain without stomping user choice
   useEffect(() => {
+    // EVM options populate after mount. Keep the explicit route destination
+    // while that list is loading instead of replacing it with a fallback.
+    if (initialChains && sourceChainId === initialChains.sourceChainId &&
+      targetChainId === initialChains.targetChainId &&
+      !chainOptionById.has(initialChains.targetChainId)) return;
     if (!destinationOptions.length) {
       setTargetChainId(null);
       return;
@@ -385,7 +398,7 @@ export function BridgeCard({
       );
       return baseOption?.id ?? destinationOptions[0]?.id ?? null;
     });
-  }, [destinationOptionsKey, destinationOptions, sourceChainId, defaultTargetChainId]);
+  }, [destinationOptionsKey, destinationOptions, sourceChainId, defaultTargetChainId, initialChains, targetChainId, chainOptionById]);
 
   useEffect(() => {
     if (

@@ -1,0 +1,23 @@
+version = 1
+
+[project]
+name = "cctp-bridge"
+slug = "cctp-bridge"
+
+[build]
+mode = "auto"
+runtime = "auto"
+framework = "auto"
+command = "auto"
+output_dir = "auto"
+root = "."
+
+[service]
+port = 3000
+
+[deploy]
+region = "local-dev"
+target = "staging"
+
+[routing]
+mode = "auto"

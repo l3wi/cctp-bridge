@@ -11,7 +11,7 @@ export type RouteGuide = (typeof routeGuides)[number];
 export const docsNavigation = [
   { title: "Get started", links: [
     { label: "How it works", href: "/docs/how-it-works" },
-    { label: "Fast & Standard transfers", href: "/docs/how-it-works#transfer-speed" },
+    { label: "Fast & Standard transfers", href: "/docs/transfer-speed" },
     { label: "Fees and transfer times", href: "/docs/fees" },
   ] },
   { title: "Route guides", links: [

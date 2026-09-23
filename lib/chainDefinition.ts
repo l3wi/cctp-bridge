@@ -1,8 +1,9 @@
 import type { ChainDefinition } from "@circle-fin/bridge-kit";
-import type { UniversalChainMetadata } from "@/lib/metadata/types";
+import type { GatewayMetadata, UniversalChainMetadata } from "@/lib/metadata/types";
 
 type ChainCctp = NonNullable<ChainDefinition["cctp"]>;
 type ChainContracts = NonNullable<ChainCctp["contracts"]>;
+type ChainGateway = NonNullable<ChainDefinition["gateway"]>;
 
 const normalizeVersionConfig = (
   config:
@@ -74,6 +75,34 @@ const toCctpConfig = (
   };
 };
 
+const toGatewayConfig = (
+  gateway: GatewayMetadata | undefined
+): ChainDefinition["gateway"] => {
+  if (gateway?.domain === undefined) {
+    return undefined;
+  }
+
+  const v1 = gateway.contracts?.v1;
+  const contracts: ChainGateway["contracts"] = {};
+
+  if (v1?.wallet && v1.minter) {
+    contracts.v1 = {
+      wallet: v1.wallet,
+      minter: v1.minter,
+      depositForHandler: v1.depositForHandler,
+    };
+  }
+
+  return {
+    domain: gateway.domain,
+    contracts,
+    forwarderSupported: {
+      source: gateway.forwarderSupported?.source === true,
+      destination: gateway.forwarderSupported?.destination === true,
+    },
+  };
+};
+
 export const toChainDefinition = (
   chain: UniversalChainMetadata
 ): ChainDefinition => {
@@ -88,6 +117,8 @@ export const toChainDefinition = (
     usdcAddress: chain.usdcAddress ?? null,
     usdtAddress: chain.usdtAddress ?? null,
     cctp: toCctpConfig(chain),
+    kitContracts: chain.kitContracts,
+    gateway: toGatewayConfig(chain.gateway),
   };
 
   if (chain.type === "evm") {

@@ -196,6 +196,18 @@ describe("BridgeCard recipient lock integration", () => {
     }));
   });
 
+  it("keeps the route source when an EVM wallet connects on another network", async () => {
+    mockState.evmConnected = false;
+    const props = { mode: "intentOnly" as const, initialChains: { sourceChainId: "Solana" as const, targetChainId: 42161 } };
+    const { rerender } = render(<BridgeCard {...props} />);
+    await waitFor(() => expect(screen.getAllByRole("combobox")[0].textContent).toContain("Solana"));
+    mockState.evmConnected = true;
+    rerender(<BridgeCard {...props} />);
+    await waitFor(() => expect(screen.getAllByRole("combobox")[0].textContent).toContain("Solana"));
+    expect(screen.getAllByRole("combobox")[1].textContent).toContain("Arbitrum");
+    expect(bridgeMock).not.toHaveBeenCalled();
+  });
+
   it("locks the connected destination wallet at click time even if wallet changes right after", async () => {
     const user = userEvent.setup();
     const { rerender } = render(<BridgeCard />);

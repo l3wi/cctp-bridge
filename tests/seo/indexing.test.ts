@@ -11,7 +11,7 @@ describe("public indexing policy", () => {
       const url = new URL(entry.url);
       expect(url.origin).toBe("https://www.cctp.io");
       expect(url.search).toBe("");
-      expect(url.pathname === "/" || url.pathname.startsWith("/docs/")).toBe(true);
+      expect(url.pathname === "/" || url.pathname.startsWith("/docs/") || url.pathname === "/usdc" || url.pathname.startsWith("/usdc/")).toBe(true);
     }
     expect(robots().rules).toEqual({ userAgent: "*", allow: "/" });
     expect(robots().sitemap).toBe("https://www.cctp.io/sitemap.xml");

@@ -36,3 +36,11 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 scripts/deployer-keypair.json
+.env*
+
+# Local wallet smoke-test environments and design captures
+/.fee-fork-smoke.*/
+/fee-modal-1.45m-updated.png
+/fee-modal-1.45m.png
+/fee-notice-desktop.png
+/fee-notice-mobile.png

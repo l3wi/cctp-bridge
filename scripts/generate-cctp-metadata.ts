@@ -10,6 +10,8 @@ import type {
   SolanaChainMetadata,
   CctpContracts,
   KitContracts,
+  GatewayContracts,
+  GatewayMetadata,
 } from "../lib/metadata/types";
 
 const OUTPUT_PATH = resolve(process.cwd(), ".generated/metadata/cctp.generated.json");
@@ -77,14 +79,72 @@ function getRpcEndpoints(chain: ChainWithOptionalRpcUrls): string[] {
 function normalizeKitContracts(value: unknown): KitContracts | undefined {
   if (!value || typeof value !== "object") return undefined;
 
-  const raw = value as { bridge?: unknown };
+  const raw = value as { bridge?: unknown; adapter?: unknown };
   const contracts: KitContracts = {};
 
   if (typeof raw.bridge === "string" && raw.bridge.trim()) {
     contracts.bridge = raw.bridge;
   }
+  if (typeof raw.adapter === "string" && raw.adapter.trim()) {
+    contracts.adapter = raw.adapter;
+  }
 
   return Object.keys(contracts).length > 0 ? contracts : undefined;
+}
+
+function normalizeGatewayContracts(value: unknown): GatewayContracts | undefined {
+  if (!value || typeof value !== "object") return undefined;
+
+  const raw = value as { v1?: unknown };
+  const contracts: GatewayContracts = {};
+
+  if (raw.v1 && typeof raw.v1 === "object") {
+    const v1 = raw.v1 as {
+      wallet?: unknown;
+      minter?: unknown;
+      depositForHandler?: unknown;
+    };
+    const normalizedV1 = {
+      wallet: typeof v1.wallet === "string" ? v1.wallet : undefined,
+      minter: typeof v1.minter === "string" ? v1.minter : undefined,
+      depositForHandler:
+        typeof v1.depositForHandler === "string" ? v1.depositForHandler : undefined,
+    };
+
+    if (Object.values(normalizedV1).some((item) => typeof item === "string")) {
+      contracts.v1 = normalizedV1;
+    }
+  }
+
+  return Object.keys(contracts).length > 0 ? contracts : undefined;
+}
+
+function normalizeGateway(value: unknown): GatewayMetadata | undefined {
+  if (!value || typeof value !== "object") return undefined;
+
+  const raw = value as {
+    domain?: unknown;
+    contracts?: unknown;
+    forwarderSupported?: {
+      source?: unknown;
+      destination?: unknown;
+    };
+  };
+
+  const gateway: GatewayMetadata = {
+    domain: typeof raw.domain === "number" ? raw.domain : undefined,
+    contracts: normalizeGatewayContracts(raw.contracts),
+    forwarderSupported: raw.forwarderSupported
+      ? {
+          source: raw.forwarderSupported.source === true,
+          destination: raw.forwarderSupported.destination === true,
+        }
+      : undefined,
+  };
+
+  return gateway.domain !== undefined || gateway.contracts || gateway.forwarderSupported
+    ? gateway
+    : undefined;
 }
 
 function normalizeChain(chain: ChainWithOptionalRpcUrls): UniversalChainMetadata | null {
@@ -120,6 +180,7 @@ function normalizeChain(chain: ChainWithOptionalRpcUrls): UniversalChainMetadata
         : undefined,
     },
     kitContracts: normalizeKitContracts((chain as { kitContracts?: unknown }).kitContracts),
+    gateway: normalizeGateway((chain as { gateway?: unknown }).gateway),
     rpcEndpoints: getRpcEndpoints(chain),
   };
 

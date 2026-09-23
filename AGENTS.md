@@ -1,5 +1,10 @@
 # Repository Guidelines
 
+## Friction Logging
+- Log papercuts and friction (tooling, docs, APIs, tests, conventions) as you hit them with `bunx frog log`.
+- Do not add global, system, or internal friction.
+- Run `bunx frog list` first to see what is already known.
+
 ## Project Structure & Module Organization
 - Next.js App Router lives in `app/` (`layout.tsx`, `page.tsx`, `og/`), with global styles in `app/globals.css`.
 - UI is split between `components/` (shadcn/Radix-based atoms, wallet/bridge widgets) and `public/` assets (chain icons).

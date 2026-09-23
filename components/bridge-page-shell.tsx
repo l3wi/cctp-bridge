@@ -12,31 +12,40 @@ interface BridgePageShellProps {
   tracking?: boolean;
   history?: boolean;
   progress?: boolean;
+  title?: string;
+  subtitle?: string;
 }
 
-export function BridgePageShell({ children, homepage = false, tracking = false, history = false, progress = false }: BridgePageShellProps) {
+export function BridgePageShell({ children, homepage = false, tracking = false, history = false, progress = false, title, subtitle }: BridgePageShellProps) {
   if (homepage || tracking || history) {
+    const footerLinks = homepage
+      ? [
+          { href: "/docs/transfer-speed", label: "Fast vs Standard" },
+          { href: "/docs/fees", label: "Fee Details" },
+          { href: "/bridge", label: "Find Transfer" },
+        ]
+      : [
+          { href: "/", label: "New transfer" },
+          { href: "/docs/recover", label: "Recovery guide" },
+        ];
     return (
       <section className="flex min-h-svh flex-col" aria-label={tracking ? "Track a transfer" : "USDC bridge"}>
         <SiteHeader active={homepage ? "bridge" : history || progress ? "history" : "find"} />
         <div className="flex flex-1 flex-col items-center justify-center gap-[18px] px-4 pt-6 pb-12">
           <div className="space-y-2.5 text-center">
-            <h1 className="text-4xl leading-[42px] font-semibold tracking-[-0.045em]">{history ? "Transfer history" : progress ? "Your transfer" : tracking ? "Find transfer" : "CCTP Bridge"}</h1>
-            <p className="text-[15px] leading-6 text-muted-foreground">{history ? "Your recent USDC transfers, all in one place." : progress ? "Follow your USDC from source to destination." : tracking ? "Look up a CCTP transfer with its source network and transaction hash." : "Native USDC. EVM ↔ Solana. Powered by Circle CCTP."}</p>
+            <h1 className="text-4xl leading-[42px] font-semibold tracking-[-0.045em]">{title ?? (history ? "Transfer history" : progress ? "Your transfer" : tracking ? "Find transfer" : "CCTP Bridge")}</h1>
+            <p className="text-[15px] leading-6 text-muted-foreground">{subtitle ?? (history ? "Your recent USDC transfers, all in one place." : progress ? "Follow your USDC from source to destination." : tracking ? "Look up a CCTP transfer with its source network and transaction hash." : "Native USDC. EVM ↔ Solana. Powered by Circle CCTP.")}</p>
           </div>
           <div className="w-full max-w-[580px]">
             <BridgeContentBoundary>{children}</BridgeContentBoundary>
           </div>
           <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-2 text-sm text-muted-foreground sm:gap-x-6">
-            {homepage && (
-              <>
-                <span>Native USDC on arrival</span>
-                <span aria-hidden="true" className="text-divider">/</span>
-              </>
-            )}
-            <Link href={tracking || history ? "/" : "/bridge"} className="inline-flex items-center gap-1 transition-colors hover:text-foreground">{tracking || history ? "New transfer" : "Find transfer"}<ArrowUpRight className="size-3.5 shrink-0" aria-hidden="true" /></Link>
-            <span aria-hidden="true" className="text-divider">/</span>
-            <Link href={tracking || history ? "/docs/recover" : "/docs/fees"} className="inline-flex items-center gap-1 transition-colors hover:text-foreground">{tracking || history ? "Recovery guide" : "Fee Details"}<ArrowUpRight className="size-3.5 shrink-0" aria-hidden="true" /></Link>
+            {footerLinks.map((link, index) => (
+              <span key={link.href} className="contents">
+                {index > 0 && <span aria-hidden="true" className="text-divider">/</span>}
+                <Link href={link.href} className="inline-flex items-center gap-1 transition-colors hover:text-foreground">{link.label}<ArrowUpRight className="size-3.5 shrink-0" aria-hidden="true" /></Link>
+              </span>
+            ))}
           </div>
         </div>
       </section>

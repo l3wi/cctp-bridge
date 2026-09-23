@@ -34,13 +34,24 @@ describe("metadata index", () => {
 
     expect(mainnetChains.some((chain) => chain.type === "evm" && chain.chainId === 1672)).toBe(true);
     expect(mainnetChains.some((chain) => chain.type === "evm" && chain.chainId === 1776)).toBe(true);
+    expect(mainnetChains.some((chain) => chain.type === "evm" && chain.chainId === 25)).toBe(true);
     expect(testnetChains.some((chain) => chain.type === "evm" && chain.chainId === 688689)).toBe(true);
     expect(testnetChains.some((chain) => chain.type === "evm" && chain.chainId === 1439)).toBe(true);
+    expect(testnetChains.some((chain) => chain.type === "evm" && chain.chainId === 338)).toBe(true);
   });
 
-  it("preserves Circle BridgeKit bridge contracts for custom fee routing", () => {
+  it("preserves Circle BridgeKit contracts for custom fee routing", () => {
     const ethereum = resolveBridgeChain(1, "mainnet");
 
     expect(ethereum.kitContracts?.bridge).toMatch(/^0x[a-fA-F0-9]{40}$/);
+    expect(ethereum.kitContracts?.adapter).toMatch(/^0x[a-fA-F0-9]{40}$/);
+  });
+
+  it("preserves Circle Gateway metadata when BridgeKit provides it", () => {
+    const ethereum = resolveBridgeChain(1, "mainnet");
+
+    expect(ethereum.gateway?.domain).toBe(0);
+    expect(ethereum.gateway?.contracts?.v1?.wallet).toMatch(/^0x[a-fA-F0-9]{40}$/);
+    expect(ethereum.gateway?.contracts?.v1?.minter).toMatch(/^0x[a-fA-F0-9]{40}$/);
   });
 });

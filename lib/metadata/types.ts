@@ -33,6 +33,26 @@ export interface CctpMetadata {
 
 export interface KitContracts {
   bridge?: string;
+  adapter?: string;
+}
+
+export interface GatewayContractConfig {
+  wallet?: string;
+  minter?: string;
+  depositForHandler?: string;
+}
+
+export interface GatewayContracts {
+  v1?: GatewayContractConfig;
+}
+
+export interface GatewayMetadata {
+  domain?: number;
+  contracts?: GatewayContracts;
+  forwarderSupported?: {
+    source: boolean;
+    destination: boolean;
+  };
 }
 
 interface BaseChainMetadata {
@@ -45,6 +65,7 @@ interface BaseChainMetadata {
   nativeCurrency: NativeCurrency;
   cctp?: CctpMetadata;
   kitContracts?: KitContracts;
+  gateway?: GatewayMetadata;
 }
 
 export interface EvmChainMetadata extends BaseChainMetadata {

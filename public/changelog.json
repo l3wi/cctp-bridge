@@ -2,10 +2,24 @@
   "schemaVersion": 1,
   "generatedFrom": {
     "from": "2026-01-21",
-    "to": "2026-08-05",
+    "to": "2026-09-23",
     "source": "git-history"
   },
   "entries": [
+    {
+      "id": "2026-09-redesign-and-docs",
+      "date": "2026-09-23",
+      "category": "ui",
+      "title": "Redesigned bridge and new docs",
+      "summary": "A refreshed bridge interface and new documentation make it easier to choose a route, compare transfer speeds, and follow your transfer.",
+      "highlights": [
+        "Cleaner bridge, tracking, and history pages with clearer navigation.",
+        "New documentation for transfer speeds, route guides, and recovery."
+      ],
+      "audience": ["all-users"],
+      "importance": "major",
+      "references": { "commits": [] }
+    },
     {
       "id": "2026-08-bridge-flow-refinements",
       "date": "2026-08-05",

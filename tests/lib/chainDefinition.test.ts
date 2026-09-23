@@ -15,6 +15,24 @@ describe("toChainDefinition", () => {
       eurcAddress: "0xeurc",
       usdcAddress: "0xusdc",
       usdtAddress: "0xusdt",
+      kitContracts: {
+        bridge: "0xbridge",
+        adapter: "0xadapter",
+      },
+      gateway: {
+        domain: 6,
+        contracts: {
+          v1: {
+            wallet: "0xgatewayWallet",
+            minter: "0xgatewayMinter",
+            depositForHandler: "0xdepositForHandler",
+          },
+        },
+        forwarderSupported: {
+          source: false,
+          destination: true,
+        },
+      },
       cctp: {
         domain: 6,
         contracts: {
@@ -37,6 +55,24 @@ describe("toChainDefinition", () => {
       type: "evm",
       chainId: 8453,
       usdtAddress: "0xusdt",
+      kitContracts: {
+        bridge: "0xbridge",
+        adapter: "0xadapter",
+      },
+      gateway: {
+        domain: 6,
+        contracts: {
+          v1: {
+            wallet: "0xgatewayWallet",
+            minter: "0xgatewayMinter",
+            depositForHandler: "0xdepositForHandler",
+          },
+        },
+        forwarderSupported: {
+          source: false,
+          destination: true,
+        },
+      },
       cctp: {
         domain: 6,
         forwarderSupported: {
