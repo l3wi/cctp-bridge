@@ -8,13 +8,13 @@ export async function standardFeeApi<T>(body: object): Promise<T> {
   return result as T;
 }
 
-export async function reserveStandardFeeClient(input: StandardFeeRequest, signature: string) {
-  localStorage.setItem(storageKey(input.address), JSON.stringify({ request: input, signature }));
-  return standardFeeApi<StandardFeeReservation>({ action: "reserve", ...input, signature });
+export async function reserveStandardFeeClient(input: StandardFeeRequest) {
+  localStorage.setItem(storageKey(input.address), JSON.stringify({ request: input }));
+  return standardFeeApi<StandardFeeReservation>({ action: "reserve", ...input });
 }
 
 export const updateStandardFeeClient = (r: StandardFeeReservation, action: "broadcast" | "cancel" | "submit" | "rejected", burnHash?: string) =>
-  standardFeeApi({ action, id: r.id, token: r.token, burnHash });
+  standardFeeApi<{ ok: boolean; pendingReceipt?: boolean }>({ action, id: r.id, token: r.token, burnHash });
 
 const storageKey = (address: string) => `cctp-standard-fee:${address.startsWith("0x") ? address.toLowerCase() : address}`;
 export function saveStandardFee(address: string, r: StandardFeeReservation, burnHash?: string) {
@@ -24,19 +24,22 @@ export function saveStandardFee(address: string, r: StandardFeeReservation, burn
 export async function recoverStandardFee(address: string) {
   const saved = localStorage.getItem(storageKey(address));
   if (!saved) return;
-  const data = JSON.parse(saved) as { reservation?: StandardFeeReservation; burnHash?: string; request?: StandardFeeRequest; signature?: string };
+  const data = JSON.parse(saved) as { reservation?: StandardFeeReservation; burnHash?: string; request?: StandardFeeRequest };
   let reservation = data.reservation;
   const { burnHash } = data;
-  if (!reservation && data.request && data.signature) {
+  if (!reservation && data.request) {
     try {
-      reservation = await standardFeeApi<StandardFeeReservation>({ action: "reserve", ...data.request, signature: data.signature });
+      reservation = await standardFeeApi<StandardFeeReservation>({ action: "reserve", ...data.request });
     } catch (error) {
       if ((error as { code?: string }).code === "EXPIRED_UNRESERVED") { clearStandardFee(address); return; }
       throw error;
     }
   }
   if (!reservation) throw new Error("Unable to recover the previous fee reservation");
-  if (burnHash) await updateStandardFeeClient(reservation, "submit", burnHash);
+  if (burnHash) {
+    const result = await updateStandardFeeClient(reservation, "submit", burnHash);
+    if (result.pendingReceipt) throw new Error("Your previous Standard bridge receipt is not available yet. Please retry shortly.");
+  }
   else await updateStandardFeeClient(reservation, "cancel");
   localStorage.removeItem(storageKey(address));
 }

@@ -32,6 +32,13 @@ describe("cumulative Standard billing", () => {
   });
   afterEach(() => { client.close(); rmSync(directory, { recursive: true }); });
 
+  it("recovers a saved small quote after another transfer makes a fee due", async () => {
+    const input = request(1_000_000n);
+    const saved = await reserveStandardFee(input);
+    await client.execute({ sql: "UPDATE standard_fee_accounts SET volume_atomic = ?", args: [Number(M)] });
+    expect(await reserveStandardFee(input)).toMatchObject(saved);
+  });
+
   it("charges an imported whale only once, then waits for the next million boundary", () => {
     const first = quoteCumulativeFee(18n * M + M / 2n, M, M / 10n);
     expect(first).toEqual({ fee: F, nextThreshold: 19n * M });
@@ -50,11 +57,11 @@ describe("cumulative Standard billing", () => {
     expect(next.feeAtomic).toBe(Number(F));
   });
 
-  it("prevents a second reservation, replays safely, and credits a receipt once", async () => {
+  it("allows independent reservations, replays safely, and credits a receipt once", async () => {
     const input = request();
     const r = await reserveStandardFee(input);
     expect(await reserveStandardFee(input)).toMatchObject(r);
-    await expect(reserveStandardFee(request())).rejects.toThrow("awaiting confirmation");
+    expect((await reserveStandardFee(request())).id).not.toBe(r.id);
     await updateStandardFee(r.id, r.token, "broadcast");
     await expect(updateStandardFee(r.id, r.token, "cancel")).rejects.toThrow("reconciled");
     await updateStandardFee(r.id, r.token, "submit", "0xpaid");
@@ -66,12 +73,12 @@ describe("cumulative Standard billing", () => {
     expect((await reserveStandardFee(request(1_000_000n))).feeAtomic).toBe(0);
   });
 
-  it("keeps uncertain burns locked and does not credit reverted burns", async () => {
+  it("allows new requests during uncertain burns and does not credit reverted burns", async () => {
     const r = await reserveStandardFee(request());
     await updateStandardFee(r.id, r.token, "broadcast");
     await updateStandardFee(r.id, r.token, "submit", "0xfail");
     verifyBurn.mockResolvedValue("pending");
-    await expect(reserveStandardFee(request())).rejects.toThrow("awaiting confirmation");
+    expect((await reserveStandardFee(request())).id).not.toBe(r.id);
     verifyBurn.mockResolvedValue("failed");
     await reconcileStandardFee(r.id);
     expect(await db.query.standardFeeAccounts.findFirst()).toMatchObject({ volumeAtomic: 0, feesPaidAtomic: 0, activeReservationId: null });
@@ -81,14 +88,15 @@ describe("cumulative Standard billing", () => {
   it("marks sent only on receipt, and credits only after final verification", async () => {
     const r = await reserveStandardFee(request());
     await updateStandardFee(r.id, r.token, "broadcast");
-    await updateStandardFee(r.id, r.token, "submit", "0xreceipt");
     verifyBurn.mockResolvedValue("pending");
+    await updateStandardFee(r.id, r.token, "submit", "0xreceipt");
     await reconcileStandardFee(r.id);
-    expect(await db.query.standardFeeReservations.findFirst()).toMatchObject({ status: "broadcasting", burnHash: "0xreceipt" });
+    expect(await db.query.standardFeeReservations.findFirst()).toMatchObject({ status: "broadcasting", burnHash: null });
     verifyBurn.mockResolvedValue("received");
+    await updateStandardFee(r.id, r.token, "submit", "0xreceipt");
     await reconcileStandardFee(r.id);
     expect(await db.query.standardFeeReservations.findFirst()).toMatchObject({ status: "submitted" });
-    expect(await db.query.standardFeeAccounts.findFirst()).toMatchObject({ volumeAtomic: 0, feesPaidAtomic: 0, activeReservationId: r.id });
+    expect(await db.query.standardFeeAccounts.findFirst()).toMatchObject({ volumeAtomic: 0, feesPaidAtomic: 0, activeReservationId: null });
     verifyBurn.mockResolvedValue("confirmed");
     await reconcileStandardFee(r.id);
     await reconcileStandardFee(r.id);
@@ -102,13 +110,13 @@ describe("cumulative Standard billing", () => {
     expect(await previewStandardFee(request(1_000_000n))).toEqual({ volumeAtomic: String(M), feeAtomic: "0", chargeFee: false });
   });
 
-  it("blocks previews of unsettled burns instead of displaying a stale fee", async () => {
+  it("quotes confirmed volume while another burn remains unsettled", async () => {
     const r = await reserveStandardFee(request());
     await updateStandardFee(r.id, r.token, "broadcast");
     await updateStandardFee(r.id, r.token, "submit", "0xpending");
     verifyBurn.mockResolvedValue("pending");
-    await expect(previewStandardFee(request(1_000_000n))).rejects.toThrow("awaiting confirmation");
-    expect(await db.query.standardFeeAccounts.findFirst()).toMatchObject({ volumeAtomic: 0, feesPaidAtomic: 0, activeReservationId: r.id });
+    expect(await previewStandardFee(request(1_000_000n))).toEqual({ volumeAtomic: "0", feeAtomic: "0", chargeFee: false });
+    expect(await db.query.standardFeeAccounts.findFirst()).toMatchObject({ volumeAtomic: 0, feesPaidAtomic: 0, activeReservationId: null });
   });
 
   it("releases a reverted burn before quoting the fee still owed", async () => {
@@ -128,6 +136,70 @@ describe("cumulative Standard billing", () => {
     await updateStandardFee(second.id, second.token, "broadcast");
     await updateStandardFee(second.id, second.token, "rejected");
     expect(await db.query.standardFeeAccounts.findFirst()).toMatchObject({ volumeAtomic: 0, activeReservationId: null });
+  });
+
+  it("does not let another caller block a wallet by reserving and never sending", async () => {
+    const abandoned = await reserveStandardFee(request());
+    await updateStandardFee(abandoned.id, abandoned.token, "broadcast");
+    expect(await previewStandardFee(request())).toEqual({ volumeAtomic: "0", feeAtomic: String(F), chargeFee: true });
+    expect((await reserveStandardFee(request())).id).not.toBe(abandoned.id);
+    expect(verifyBurn).not.toHaveBeenCalled();
+  });
+
+  it("does not let an invalid submitted receipt block the next quote", async () => {
+    const attacker = await reserveStandardFee(request());
+    await updateStandardFee(attacker.id, attacker.token, "broadcast");
+    verifyBurn.mockRejectedValue(new Error("Burn signer mismatch"));
+    await expect(updateStandardFee(attacker.id, attacker.token, "submit", "0xinvalid")).rejects.toThrow("Burn signer mismatch");
+    expect(await previewStandardFee(request())).toEqual({ volumeAtomic: "0", feeAtomic: String(F), chargeFee: true });
+    expect((await reserveStandardFee(request())).id).not.toBe(attacker.id);
+    expect(await db.query.standardFeeAccounts.findFirst()).toMatchObject({ volumeAtomic: 0, feesPaidAtomic: 0 });
+  });
+
+  it("credits the same verified transaction only once across different reservations", async () => {
+    const first = await reserveStandardFee(request());
+    const second = await reserveStandardFee(request());
+    for (const reservation of [first, second]) {
+      await updateStandardFee(reservation.id, reservation.token, "broadcast");
+      await updateStandardFee(reservation.id, reservation.token, "submit", "0xduplicate");
+    }
+    await reconcileStandardFee(first.id);
+    await reconcileStandardFee(second.id);
+    await reconcileStandardFee(second.id);
+    expect(await db.query.standardFeeAccounts.findFirst()).toMatchObject({ volumeAtomic: Number(M), feesPaidAtomic: Number(F), nextThresholdAtomic: Number(2n * M) });
+  });
+
+  it("does not let an invalid reservation claim the hash before its valid owner", async () => {
+    const attacker = await reserveStandardFee(request(M, "0x3333333333333333333333333333333333333333"));
+    const legitimate = await reserveStandardFee(request());
+    verifyBurn.mockImplementation(async reservation => {
+      if (reservation.address !== address) throw new Error("Burn signer mismatch");
+      return "confirmed";
+    });
+    await updateStandardFee(attacker.id, attacker.token, "broadcast");
+    await expect(updateStandardFee(attacker.id, attacker.token, "submit", "0xshared")).rejects.toThrow("Burn signer mismatch");
+    await updateStandardFee(legitimate.id, legitimate.token, "broadcast");
+    await updateStandardFee(legitimate.id, legitimate.token, "submit", "0xshared");
+    await previewStandardFee(request(M, attacker.address));
+    await reconcileStandardFee(legitimate.id);
+    const accounts = await db.select().from(schema.standardFeeAccounts);
+    expect(accounts.find(account => account.address === address)).toMatchObject({ volumeAtomic: Number(M), feesPaidAtomic: Number(F) });
+    expect(accounts.find(account => account.address === attacker.address)).toMatchObject({ volumeAtomic: 0, feesPaidAtomic: 0 });
+  });
+
+  it("keeps thresholds monotonic when old zero-fee and paid quotes settle out of order", async () => {
+    const zeroFee = await reserveStandardFee(request(M / 2n));
+    const olderPaid = await reserveStandardFee(request());
+    const newerPaid = await reserveStandardFee(request());
+    expect(zeroFee.feeAtomic).toBe(0);
+    for (const [reservation, hash] of [[newerPaid, "0xnewer"], [zeroFee, "0xzero"], [olderPaid, "0xolder"]] as const) {
+      await updateStandardFee(reservation.id, reservation.token, "broadcast");
+      await updateStandardFee(reservation.id, reservation.token, "submit", hash);
+      await reconcileStandardFee(reservation.id);
+      const account = await db.query.standardFeeAccounts.findFirst();
+      expect(account!.nextThresholdAtomic).toBeGreaterThanOrEqual(Number(2n * M));
+    }
+    expect(await db.query.standardFeeAccounts.findFirst()).toMatchObject({ volumeAtomic: Number(5n * M / 2n), feesPaidAtomic: Number(2n * F), nextThresholdAtomic: Number(3n * M) });
   });
 
   it("imports only Standard history, combining EVM casing and preserving Solana casing", async () => {

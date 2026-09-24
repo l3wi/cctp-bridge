@@ -1,6 +1,6 @@
 /** @vitest-environment jsdom */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { notifyStandardFeeReceipt, saveStandardFee } from "@/lib/cctp/standardFeeClient";
+import { notifyStandardFeeReceipt, saveStandardFee, reserveStandardFeeClient, recoverStandardFee } from "@/lib/cctp/standardFeeClient";
 
 describe("fee receipt notification", () => {
   const fetchMock = vi.fn();
@@ -10,6 +10,15 @@ describe("fee receipt notification", () => {
     vi.stubGlobal("fetch", fetchMock);
   });
   afterEach(() => { localStorage.clear(); vi.unstubAllGlobals(); });
+  it("reserves without signing and retains an unobserved burn for recovery", async () => {
+    const request = { requestId: "request", address: "0xwallet", sourceChainId: 1, amountAtomic: "1000000", issuedAt: Date.now() };
+    await reserveStandardFeeClient(request);
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual({ action: "reserve", ...request });
+    saveStandardFee("0xwallet", { id: "id", token: "token", chargeFee: false, feeAtomic: "0", recipient: "recipient" }, "0xburn");
+    fetchMock.mockResolvedValue({ ok: true, json: async () => ({ ok: true, pendingReceipt: true }) });
+    await expect(recoverStandardFee("0xwallet")).rejects.toThrow("receipt is not available");
+    expect(localStorage.getItem("cctp-standard-fee:0xwallet")).toContain("0xburn");
+  });
   it("requests independent server verification only for the saved hash", async () => {
     const reservation = { id: "id", token: "token", chargeFee: true, feeAtomic: "100000000", recipient: "recipient" };
     saveStandardFee("0xwallet", reservation, "0xburn");

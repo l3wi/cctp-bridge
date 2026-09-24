@@ -152,6 +152,17 @@ describe("useBurn EVM chain assertions", () => {
     solanaWalletState.signTransaction = undefined;
   });
 
+  it("sends a Standard EVM transfer without a message signature", async () => {
+    const { result } = renderHook(() => useBurn());
+    await act(async () => {
+      const burn = await result.current.executeBurn({ sourceChainId: 8453, destinationChainId: 10, amount: 1_000_000n, recipientAddress: "0x5555555555555555555555555555555555555555", transferSpeed: "standard" });
+      expect(burn.success).toBe(true);
+    });
+    expect(walletClientState.current!.signMessage).not.toHaveBeenCalled();
+    expect(sendTransactionMock).toHaveBeenCalled();
+    expect(reserveFeeMock).toHaveBeenCalledWith(expect.objectContaining({ sourceChainId: 8453 }));
+  });
+
   it("rejects approval before sending when the wallet is not on the source chain", async () => {
     walletClientState.current!.chain.id = 1;
     const { result } = renderHook(() => useBurn());
@@ -239,6 +250,7 @@ describe("useBurn Solana finality and fast fee safety", () => {
         maxFee: 100n,
       })
     );
+    expect(solanaWalletState.signMessage).not.toHaveBeenCalled();
     expect(signSolanaTransactionMock).toHaveBeenCalledTimes(1);
     expect(sendSolanaTransactionNoConfirmMock).toHaveBeenCalledTimes(1);
     expect(burnResult!).toEqual(
@@ -269,6 +281,7 @@ describe("useBurn Solana finality and fast fee safety", () => {
         maxFee: 0n,
       })
     );
+    expect(solanaWalletState.signMessage).not.toHaveBeenCalled();
     expect(signSolanaTransactionMock).toHaveBeenCalledTimes(1);
     expect(sendSolanaTransactionNoConfirmMock).toHaveBeenCalledTimes(1);
   });

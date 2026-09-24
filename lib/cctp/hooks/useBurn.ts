@@ -33,7 +33,7 @@ import {
   prepareEvmBurn,
 } from "../evm/burn";
 import { getFastTransferFeeQuote } from "../fastTransferFee";
-import { standardFeeMessage, type StandardFeeReservation, type StandardFeeRequest } from "../cumulativeFee";
+import { type StandardFeeReservation, type StandardFeeRequest } from "../cumulativeFee";
 import { previewStandardFeeClient, reserveStandardFeeClient, updateStandardFeeClient, recoverStandardFee, saveStandardFee, clearStandardFee } from "../standardFeeClient";
 
 // Solana burn utilities
@@ -441,17 +441,7 @@ export function useBurn() {
             requestId: crypto.randomUUID(), address, sourceChainId: params.sourceChainId,
             amountAtomic: params.amount.toString(), issuedAt: Date.now(),
           };
-          const message = standardFeeMessage(request);
-          toast({ title: "Prepare Standard bridge", description: "Sign the message to verify your wallet and prepare this bridge." });
-          let signature: string;
-          if (isSolanaChain(params.sourceChainId)) {
-            if (!solanaWallet.signMessage) throw new Error("This wallet must support message signing for Standard bridges");
-            signature = btoa(String.fromCharCode(...await solanaWallet.signMessage(new TextEncoder().encode(message))));
-          } else {
-            if (!walletClient) throw new Error("Wallet client not available");
-            signature = await walletClient.signMessage({ account: address as `0x${string}`, message });
-          }
-          reservation = await reserveStandardFeeClient(request, signature);
+          reservation = await reserveStandardFeeClient(request);
           saveStandardFee(address, reservation);
           const fee = reservation.chargeFee ? BigInt(reservation.feeAtomic) : 0n;
           if (fee !== BigInt(preview.feeAtomic)) throw new Error("Your Standard fee changed. Please retry to review the updated amount.");

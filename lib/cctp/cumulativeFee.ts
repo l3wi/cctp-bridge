@@ -23,9 +23,6 @@ export interface StandardFeeRequest {
   issuedAt: number;
 }
 
-export const standardFeeMessage = (request: StandardFeeRequest) =>
-  `CCTP.io Standard bridge reservation\n${JSON.stringify(request)}\nThis signature verifies your wallet and reserves this bridge request. It does not authorize a token transfer.`;
-
 export interface StandardFeeReservation {
   id: string;
   token: string;

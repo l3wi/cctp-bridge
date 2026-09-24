@@ -43,3 +43,7 @@
 ## Configuration & Security Tips
 - Configure via `.env.local`; key vars: `NEXT_PUBLIC_BRIDGEKIT_ENV` (`testnet`/`mainnet`), optional fast transfer fee config (`NEXT_PUBLIC_FAST_TX_FEE_BPS`, `NEXT_PUBLIC_FEE_ADDRESS_EVM`, `NEXT_PUBLIC_FEE_ADDRESS_SOL`).
 - Do not commit secrets or private RPC URLs; rely on Bridge Kit chain metadata instead of hardcoding addresses.
+
+## Standard fee quotes
+- Standard transfers do not request wallet message signatures. Fee quotes must never lock an unauthenticated wallet address.
+- Verify receipt ownership and contents before claiming a transaction hash; retain unique chain/hash accounting and monotonic fee thresholds.

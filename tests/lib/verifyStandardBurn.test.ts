@@ -92,6 +92,11 @@ describe("Standard fee EVM receipt verification", () => {
   it("credits the full 100 USDC user fee when Circle sends 90 USDC to the recipient", async () => {
     expect(await verifyStandardBurn(r)).toBe("confirmed");
   });
+  it("rejects another wallet before accepting an unfinalized receipt", async () => {
+    rpc.getBlockNumber.mockResolvedValue(10n);
+    rpc.getTransaction.mockResolvedValue({ from: recipient });
+    await expect(verifyStandardBurn(r)).rejects.toThrow("signer mismatch");
+  });
   it("waits for Standard confirmations", async () => {
     rpc.getBlockNumber.mockResolvedValue(10n);
     expect(await verifyStandardBurn(r)).toBe("received");
