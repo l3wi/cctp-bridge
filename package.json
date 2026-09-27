@@ -46,7 +46,7 @@
     "@types/react": "19.1.7",
     "@types/react-dom": "19.1.6",
     "@vercel/analytics": "^1.6.1",
-    "@web3icons/react": "^4.1.17",
+    "@web3icons/react": "^4.1.22",
     "class-variance-authority": "^0.7.1",
     "cli-table3": "^0.6.5",
     "clsx": "^2.1.1",

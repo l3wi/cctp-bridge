@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { NetworkIcon, TokenIcon } from "@web3icons/react/dynamic";
 import Image from "next/image";
+import NetworkArc from "@web3icons/react/icons/networks/NetworkArc";
 import type { ChainId } from "@/lib/types";
 import { isSolanaChain } from "@/lib/types";
 
@@ -65,6 +66,11 @@ function LocalChainIcon({
 }
 
 export function ChainIcon({ chainId, size, className }: ChainIconProps) {
+  // Upstream Arc metadata currently identifies only its testnet chain ID.
+  if (chainId === 5042 || chainId === 5042002) {
+    return <NetworkArc size={size} variant="branded" className={className} aria-label="Arc" />;
+  }
+
   // Handle Solana chains using TokenIcon with SOL symbol
   if (isSolanaChain(chainId)) {
     return (
