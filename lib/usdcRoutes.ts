@@ -31,7 +31,7 @@ const SLUG_BY_CHAIN: Partial<Record<ChainId, string>> = {
   130: "unichain", 137: "polygon", 143: "monad", 146: "sonic",
   196: "x-layer", 480: "world-chain", 999: "hyperevm", 1329: "sei",
   1672: "pharos", 1776: "injective", 2818: "morph", 3343: "edge",
-  8453: "base", 42161: "arbitrum", 43114: "avalanche", 57073: "ink",
+  5042: "arc", 8453: "base", 9745: "plasma", 42161: "arbitrum", 43114: "avalanche", 57073: "ink",
   59144: "linea", 81224: "codex", 98866: "plume", Solana: "solana",
 };
 

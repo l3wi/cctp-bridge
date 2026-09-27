@@ -47,3 +47,6 @@
 ## Standard fee quotes
 - Standard transfers do not request wallet message signatures. Fee quotes must never lock an unauthenticated wallet address.
 - Verify receipt ownership and contents before claiming a transaction hash; retain unique chain/hash accounting and monotonic fee thresholds.
+
+## SDK chain updates
+- Refresh both CCTP and RPC metadata after SDK upgrades. Verify new chain RPC coverage and fee-contract metadata before release; SDK inclusion does not establish live transfer success.

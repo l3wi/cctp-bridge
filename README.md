@@ -23,6 +23,8 @@ bun run test:fork:evm    # Optional anvil fork tests; requires EVM_FORK_*_RPC_UR
 | EVM | Solana | Direct CCTP v2 (custom library) |
 | Solana | EVM | Direct CCTP v2 (custom library) |
 
+Bridge Kit 1.15.1 includes Arc mainnet (5042) and Arc Testnet (5042002), both CCTP domain 26. Refresh both chain and RPC metadata before using newly supported chains. Arc uses the existing EVM app-fee flow; SDK metadata alone is not proof of a completed transfer.
+
 ## Environment Variables
 
 ```bash

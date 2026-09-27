@@ -23,7 +23,7 @@
     "prepare": "husky"
   },
   "dependencies": {
-    "@circle-fin/bridge-kit": "^1.12.2",
+    "@circle-fin/bridge-kit": "^1.15.1",
     "@coral-xyz/anchor": "^0.32.1",
     "@libsql/client": "^0.17.4",
     "@radix-ui/react-accordion": "^1.2.20",
