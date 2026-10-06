@@ -4,6 +4,7 @@ import { useState } from "react";
 import { NetworkIcon, TokenIcon } from "@web3icons/react/dynamic";
 import Image from "next/image";
 import NetworkArc from "@web3icons/react/icons/networks/NetworkArc";
+import NetworkInjective from "@web3icons/react/icons/networks/NetworkInjective";
 import type { ChainId } from "@/lib/types";
 import { isSolanaChain } from "@/lib/types";
 
@@ -66,6 +67,11 @@ function LocalChainIcon({
 }
 
 export function ChainIcon({ chainId, size, className }: ChainIconProps) {
+  // Upstream Injective metadata does not include its EVM chain ID.
+  if (chainId === 1776) {
+    return <NetworkInjective size={size} variant="branded" className={className} aria-label="Injective" />;
+  }
+
   // Upstream Arc metadata currently identifies only its testnet chain ID.
   if (chainId === 5042 || chainId === 5042002) {
     return <NetworkArc size={size} variant="branded" className={className} aria-label="Arc" />;

@@ -18,6 +18,16 @@ vi.mock("next/image", () => ({
 }));
 
 describe("ChainIcon", () => {
+  it("renders the bundled Injective icon without a chain ID lookup", () => {
+    render(<ChainIcon chainId={1776} size={24} className="shrink-0" />);
+
+    const icon = screen.getByLabelText("Injective");
+    expect(icon.tagName.toLowerCase()).toBe("svg");
+    expect(icon.getAttribute("width")).toBe("24");
+    expect(icon.getAttribute("class")).toContain("shrink-0");
+    expect(screen.queryByRole("img", { name: "Chain 1776" })).toBeNull();
+  });
+
   it("renders a local chain asset fallback before image failure", () => {
     render(<ChainIcon chainId={3343} size={24} />);
 
