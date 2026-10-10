@@ -1,6 +1,7 @@
 ---
 title: 'Unsupported Solana cross-cluster routes are not clearly blocked'
 severity: 'major'
+issue: 'l3wi/cctp-bridge#19'
 ---
 
 ## Expected Behavior
