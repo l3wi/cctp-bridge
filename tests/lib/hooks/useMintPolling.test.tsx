@@ -327,6 +327,43 @@ describe("useMintPolling", () => {
     expect(result.current.expirationBlock).toBe("999999");
   });
 
+  it("continues polling an old Solana transfer until its attestation becomes ready", async () => {
+    const hash = `0x${"8".repeat(64)}`;
+    const onStepsUpdate = vi.fn();
+    checkSolanaMintStatusMock.mockResolvedValue({ canMint: true, alreadyMinted: false });
+    const { result, unmount } = renderHook(() => useMintPolling({
+      burnTxHash: hash,
+      sourceChainId: 1,
+      destinationChainId: "Solana",
+      burnCompletedAt: new Date("2026-02-20T00:00:00.000Z"),
+      startedAt: new Date("2026-02-20T00:00:00.000Z"),
+      isSuccess: false,
+      hasBurnCompleted: true,
+      hasFetchAttestation: false,
+      displaySteps: [
+        { name: "Burn", state: "success", txHash: hash },
+        { name: "Fetch Attestation", state: "pending" },
+        { name: "Mint", state: "pending" },
+      ],
+      onStepsUpdate,
+    }));
+    await act(async () => { await Promise.resolve(); });
+    expect(fetchAttestationUniversalMock).toHaveBeenCalledWith(1, hash);
+    expect(result.current.attestationReady).toBe(false);
+    fetchAttestationUniversalMock.mockResolvedValue({
+      status: "complete", nonce: "42", message: "0x1234", attestation: "0xabcd",
+    });
+    await act(async () => { await vi.advanceTimersByTimeAsync(15_000); });
+    expect(result.current.attestationReady).toBe(true);
+    expect(onStepsUpdate).toHaveBeenCalledWith(expect.arrayContaining([
+      expect.objectContaining({ name: "Fetch Attestation", state: "success" }),
+    ]));
+    const calls = fetchAttestationUniversalMock.mock.calls.length;
+    await act(async () => { await vi.advanceTimersByTimeAsync(30_000); });
+    expect(fetchAttestationUniversalMock).toHaveBeenCalledTimes(calls);
+    unmount();
+  });
+
   it("does not mark attestation ready when Iris returns complete without payload", async () => {
     fetchAttestationUniversalMock.mockResolvedValue({
       status: "complete",

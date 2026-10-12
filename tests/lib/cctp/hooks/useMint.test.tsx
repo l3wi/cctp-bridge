@@ -185,6 +185,30 @@ describe("useMint (Solana confirmation flow)", () => {
         destinationAddress: SOLANA_WALLET_ADDRESS,
       })
     );
+    expect(fetchAttestationUniversalMock).toHaveBeenCalledWith(
+      params.sourceChainId,
+      params.burnTxHash,
+      { forceRefresh: true }
+    );
+  });
+
+  it("reports an unavailable lookup without claiming Circle has not processed the burn", async () => {
+    fetchAttestationUniversalMock.mockResolvedValue(null);
+    const { result } = renderHook(() => useMint());
+    let mintResult: unknown;
+    await act(async () => {
+      mintResult = await result.current.executeMint({
+        burnTxHash: `0x${"a".repeat(64)}`,
+        sourceChainId: 11155111,
+        destinationChainId: "Solana_Devnet",
+        targetAddress: SOLANA_WALLET_ADDRESS,
+      });
+    });
+    expect(mintResult).toEqual(expect.objectContaining({
+      success: false,
+      error: expect.stringContaining("request may have failed"),
+    }));
+    expect(buildReceiveMessageTransactionMock).not.toHaveBeenCalled();
   });
 
   it("rejects a Solana claim with no locked target address before fetching attestation", async () => {

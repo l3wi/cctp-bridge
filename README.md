@@ -72,6 +72,8 @@ Fast tx fees are charged only for fast transfers and are included in the entered
 
 See `CLAUDE.md` for detailed architecture documentation.
 
+Solana transfers keep checking pending attestations while the transfer page is visible, including transfers older than one hour. Claim requests fresh Circle data on every attempt. See [Solana claim recovery](docs/architecture/solana-claim-recovery.md).
+
 ## Public pages and SEO
 
 The homepage and `/docs` guides use canonical URLs on `https://www.cctp.io` and are listed in `/sitemap.xml`. Transfer lookup, transaction detail, history, and the HTML image preview are noindex utilities. See [search indexing architecture](docs/architecture/seo.md) and the [Search Console research](docs/tasks/seo-research-2026-09-14.md) for policy and rollout priorities.

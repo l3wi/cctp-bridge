@@ -10,7 +10,7 @@ import { useToast } from "@/components/ui/use-toast";
 import { resolveEstimatedTimeLabel } from "@/lib/estimatedTime";
 
 // Polling configuration
-const MAX_POLL_DURATION_MS = 60 * 60 * 1000; // Stop polling after 1 hour
+const MAX_POLL_DURATION_MS = 60 * 60 * 1000; // EVM readiness polling limit
 const EVM_MINT_POLL_INTERVAL_MS = 5_000; // Fast transfers target sub-minute UX; keep EVM readiness checks responsive
 const SOLANA_POLL_INTERVAL_MS = 15_000; // Solana attestations settle slower; avoid over-polling Iris
 const REATTEST_POLL_INTERVAL_MS = 15_000; // Poll every 15 seconds while awaiting re-attestation
@@ -179,12 +179,7 @@ export function useMintPolling({
 
     if (mintSimulation.attestationReady) return false;
 
-    const referenceTime = burnCompletedAt ?? startedAt;
-    if (!referenceTime) return false;
-
-    const ageMs = Date.now() - referenceTime.getTime();
-    if (ageMs >= MAX_POLL_DURATION_MS) return false;
-
+    // Old transfers still need fresh attestation checks when reopened.
     return true;
   }, [
     isSuccess,
@@ -196,8 +191,6 @@ export function useMintPolling({
     mintSimulation.messageExpired,
     mintSimulation.attestationReady,
     isAwaitingReattestation,
-    burnCompletedAt,
-    startedAt,
   ]);
 
   // =========================================================================

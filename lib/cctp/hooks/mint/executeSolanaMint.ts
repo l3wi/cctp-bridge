@@ -101,13 +101,14 @@ export async function executeSolanaMint(params: {
 
     const attestationData = await fetchAttestationUniversal(
       sourceChainId,
-      burnTxHash
+      burnTxHash,
+      { forceRefresh: true }
     );
 
     if (!attestationData) {
       return {
         success: false,
-        error: "Attestation not found. Please wait for Circle to process the burn.",
+        error: "Unable to retrieve the attestation from Circle. It may still be processing, or the request may have failed. Please retry shortly.",
       };
     }
 
