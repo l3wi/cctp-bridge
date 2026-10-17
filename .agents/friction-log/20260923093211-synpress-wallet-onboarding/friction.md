@@ -1,6 +1,7 @@
 ---
 title: 'Synpress wallet onboarding drops words with MetaMask 13.13.1'
 severity: 'minor'
+issue: 'l3wi/cctp-bridge#22'
 ---
 
 ### Expected Behavior
