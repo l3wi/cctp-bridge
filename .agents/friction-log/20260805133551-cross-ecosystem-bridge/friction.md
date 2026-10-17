@@ -1,6 +1,7 @@
 ---
 title: 'Cross-ecosystem bridge flows lack a deterministic smoke test'
 severity: 'major'
+issue: 'l3wi/cctp-bridge#20'
 ---
 
 ## Expected Behavior
