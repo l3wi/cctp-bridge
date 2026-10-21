@@ -50,3 +50,7 @@
 
 ## SDK chain updates
 - Refresh both CCTP and RPC metadata after SDK upgrades. Verify new chain RPC coverage and fee-contract metadata before release; SDK inclusion does not establish live transfer success.
+
+## Runtime security
+- Use Bun and `bun.lock` for dependency installs; `packageManager` pins Bun.
+- Deploy on Node.js 22.23.4 or a newer 22.x patch, matching `engines` and `.nvmrc`. A manifest constraint does not patch the host runtime.

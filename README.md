@@ -6,6 +6,8 @@ Built with Next.js App Router, Wagmi/RainbowKit (EVM), Solana Wallet Adapter, Zu
 
 ## Getting Started
 
+Use Node.js **22.23.4 or later in the 22.x line** (`nvm use`) and Bun 1.3.14 (`bun.lock` is the dependency source of truth). The Node minimum includes the October 21, 2026 security fixes. Hosting must provide a patched runtime; a dependency update alone does not patch Node.js.
+
 ```bash
 bun install        # Install dependencies
 bun run dev        # Start dev server (localhost:3000)
