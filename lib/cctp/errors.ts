@@ -153,6 +153,9 @@ export function handleBurnError(
   error: unknown,
   phase: "approval" | "burn"
 ): BurnResult {
+  if (typeof error === "object" && error !== null && "code" in error && error.code === "FORWARDING_FEE_CHANGED") {
+    return { success: false, error: extractErrorMessage(error), errorCode: "FORWARDING_FEE_CHANGED" };
+  }
   const code = getErrorCode(error);
   const message = extractErrorMessage(error);
 

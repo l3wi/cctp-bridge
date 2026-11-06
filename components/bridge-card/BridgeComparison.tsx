@@ -68,7 +68,7 @@ export function BridgeComparison({
 
       </div>
       {automaticClaimSupported && (
-        <label className="flex min-h-8 cursor-pointer items-center justify-between gap-3 text-sm text-slate-300" title="Circle claims on the destination chain for you. The claim fee and destination gas are included in Total fees. Source gas is paid separately in your wallet.">
+        <label className="flex min-h-8 cursor-pointer items-center justify-between gap-3 text-sm text-slate-300" title="Circle claims on the destination chain for you. Total fees show the maximum authorized cost, including claim gas. You may receive more if execution costs less. Source gas is paid separately in your wallet.">
           <span>Automatic claim ⓘ</span>
           <span className="relative inline-flex shrink-0 items-center">
             <input type="checkbox" role="switch" aria-label="Automatic claim" checked={!!automaticClaim} disabled={disabled}

@@ -442,7 +442,7 @@ export async function prepareEvmBurn(config: EvmBurnConfig): Promise<{
     });
     const authorizedCap = BigInt(config.forwardingMaxFee);
     if (authorizedCap <= 0n || quote.maxFee > authorizedCap) {
-      throw new Error("Automatic claim fees changed. Please refresh the quote and try again.");
+      throw Object.assign(new Error("Automatic claim fees changed. Please refresh the quote and try again."), { code: "FORWARDING_FEE_CHANGED" });
     }
     // The authorization is a ceiling, never a request to spend the excess as priority gas.
     maxFee = quote.maxFee;

@@ -10,12 +10,12 @@ function response(tiers: unknown) {
 describe("forwarding quotes", () => {
   it("includes forwarding for Standard and queries the forwarding endpoint", async () => {
     const fetcher = response([{ finalityThreshold: 2000, minimumFee: 0, forwardFee: { med: 60000 } }]);
-    expect(await getForwardingQuote(params)).toMatchObject({ maxFee: 60000n, forwardFee: 60000n, protocolFee: 0n });
+    expect(await getForwardingQuote(params)).toMatchObject({ maxFee: 60000n, feeCap: 72000n, forwardFee: 60000n, protocolFee: 0n });
     expect(fetcher.mock.calls[0][0]).toContain("/0/26?forward=true");
   });
   it("rounds fractional protocol fees up and includes them in the authorized maximum", async () => {
     response([{ finalityThreshold: 1000, minimumFee: "1.3", forwardFee: { med: 60000 } }]);
-    expect(await getForwardingQuote({ ...params, speed: "fast", amount: 1_000_001n })).toMatchObject({ maxFee: 60131n, protocolFee: 131n });
+    expect(await getForwardingQuote({ ...params, speed: "fast", amount: 1_000_001n })).toMatchObject({ maxFee: 60131n, feeCap: 72158n, protocolFee: 131n });
   });
   it.each([{ tiers: [] }, { tiers: [{ finalityThreshold: 2000, minimumFee: -1, forwardFee: { med: 60000 } }] }, { tiers: [{ finalityThreshold: 2000, minimumFee: 0 }] }, { tiers: [{ finalityThreshold: 2000, minimumFee: 0, forwardFee: { med: 1_000_000 } }] }])("rejects unusable quotes", async ({ tiers }) => {
     response(tiers);

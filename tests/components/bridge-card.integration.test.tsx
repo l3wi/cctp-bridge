@@ -462,6 +462,15 @@ describe("BridgeCard execute intent integration", () => {
     expect(bridgeMock).toHaveBeenCalledTimes(1);
   });
 
+  it("explains forwarding fee changes and offers review instead of a wallet/network hint", async () => {
+    bridgeMock.mockRejectedValue(Object.assign(new Error("Automatic claim fees increased. Review updated fees before bridging."), { code: "FORWARDING_FEE_CHANGED" }));
+    render(<BridgeCard mode="executeIntent" initialIntent={{ ...baseIntent, automaticClaim: true, forwardingMaxFee: "72000" }} />);
+    await waitFor(() => expect(screen.getByRole("button", { name: "Review updated fees" })).toBeTruthy());
+    expect(screen.getByText("Automatic claim fees increased. Review updated fees before bridging.")).toBeTruthy();
+    expect(screen.queryByText(/Check your wallet connection and selected network/)).toBeNull();
+    expect(bridgeMock).toHaveBeenCalledTimes(1);
+  });
+
   it("does not retry the same execute intent when source wallet prerequisites are missing", async () => {
     mockState.evmConnected = false;
 

@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Fixed automatic-claim quote changes interrupting approval: show an explicit fee ceiling, tolerate small price changes within it, and provide a direct fee-review action when the ceiling is exceeded.
+
 - Added automatic claiming by default for all supported EVM and Solana forwarding routes, with a compact toggle and bundled transfer fees. Forwarded transfers continue tracking through destination confirmation. Arc Max now reserves USDC for approval and burn gas.
 
 - Updated Next.js and its ESLint configuration to 16.4.1 for the October security fixes, including patched React Server Components and sharp. Required Node.js 22.23.4 or later within 22.x and added `.nvmrc`.

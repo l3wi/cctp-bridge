@@ -3,10 +3,10 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { StandardFeeConfirmationProvider, useStandardFeeConfirmation } from "@/components/bridge-card/StandardFeeConfirmation";
 
-function Trigger({ proceed, forwardingFeeAtomic }: { proceed: () => void; forwardingFeeAtomic?: string }) {
+function Trigger({ proceed, forwardingFeeAtomic, forwardingFeeCapAtomic }: { proceed: () => void; forwardingFeeAtomic?: string; forwardingFeeCapAtomic?: string }) {
   const confirm = useStandardFeeConfirmation();
   return <button onClick={async () => {
-    if (await confirm({ volumeAtomic: "2400000000000", amountAtomic: "500000000", feeAtomic: "100000000", forwardingFeeAtomic })) proceed();
+    if (await confirm({ volumeAtomic: "2400000000000", amountAtomic: "500000000", feeAtomic: "100000000", forwardingFeeAtomic, forwardingFeeCapAtomic })) proceed();
   }}>Bridge</button>;
 }
 describe("Standard fee confirmation", () => {
@@ -28,6 +28,12 @@ describe("Standard fee confirmation", () => {
     fireEvent.click(screen.getByText("Bridge"));
     expect(screen.getByText("100.06 USDC")).toBeTruthy();
     expect(screen.getByText("399.94 USDC")).toBeTruthy();
+  });
+  it("shows the authorized maximum rather than implying the live estimate is guaranteed", () => {
+    render(<StandardFeeConfirmationProvider><Trigger proceed={vi.fn()} forwardingFeeAtomic="60000" forwardingFeeCapAtomic="72000" /></StandardFeeConfirmationProvider>);
+    fireEvent.click(screen.getByText("Bridge"));
+    expect(screen.getByText("Up to 100.072 USDC")).toBeTruthy();
+    expect(screen.getByText("At least 399.928 USDC")).toBeTruthy();
   });
   it("cancels without proceeding", async () => {
     const proceed = vi.fn();

@@ -176,7 +176,7 @@ export const useCrossEcosystemBridge = () => {
 
         if (!burnResult.success) {
           const errorMsg = burnResult.error || "Burn transaction failed";
-          throw new Error(errorMsg);
+          throw Object.assign(new Error(errorMsg), { code: burnResult.errorCode });
         }
 
         // Get burn hash and fire callback

@@ -168,7 +168,8 @@ describe("Arc automatic claim burns", () => {
     expect(prepared.hookData).toBe(FORWARDING_HOOK_DATA);
     // A shared URL can carry an oversized cap; never turn it into a priority-fee payment.
     expect((await prepareEvmBurn({ ...config, forwardingMaxFee: "900000000" })).maxFee).toBe(60_000n);
-    await expect(prepareEvmBurn({ ...config, forwardingMaxFee: "59000" })).rejects.toThrow("fees changed");
+    await expect(prepareEvmBurn({ ...config, forwardingMaxFee: "59000" })).rejects.toMatchObject({ code: "FORWARDING_FEE_CHANGED" });
+    expect((await prepareEvmBurn({ ...config, forwardingMaxFee: "72000" })).maxFee).toBe(60_000n);
     vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("offline")));
     await expect(prepareEvmBurn(config)).rejects.toThrow("offline");
   });

@@ -165,6 +165,7 @@ export function BridgeCard({
   >(null);
   const [bridgeResult, setBridgeResult] = useState<BridgeResult | null>(null);
   const [intentHydrated, setIntentHydrated] = useState(false);
+  const [intentFailureReason, setIntentFailureReason] = useState<string | undefined>();
   const [intentStarted, setIntentStarted] = useState(false);
   const [intentExecutionState, setIntentExecutionState] = useState<
     "idle" | "attempting" | "started" | "not-started" | "failed"
@@ -843,6 +844,7 @@ export function BridgeCard({
         : selectedEstimate?.forwardingMaxFee;
       if (automaticClaim && (!forwardingMaxFee || (mode !== "executeIntent" &&
           (!selectedEstimate?.forwardingQuotedAt || selectedEstimate.forwardingRecipient !== finalTargetAddress || Date.now() - selectedEstimate.forwardingQuotedAt > 30_000)))) {
+        setIntentFailureReason("Automatic claim fees changed or expired. Go back to review updated fees before bridging.");
         toast({ title: "Refresh automatic claim fees", description: "Wait for a current fee quote before bridging.", variant: "destructive" });
         return false;
       }
@@ -861,6 +863,7 @@ export function BridgeCard({
         return true;
       }
 
+      setIntentFailureReason(undefined);
       setIsLoading(true);
       setActiveTransferSpeed(transferSpeed);
       setBridgeResult(null);
@@ -1008,6 +1011,7 @@ export function BridgeCard({
         return true;
       } catch (error) {
         console.error("Bridge transaction failed:", error);
+        setIntentFailureReason(getErrorMessage(error));
         setIsLoading(false);
         setIsBridging(false);
         setBridgeTransactionHash(pendingHash); // Keep placeholder hash if available
@@ -1533,6 +1537,7 @@ export function BridgeCard({
             : "waiting"
         }
         onBack={handleBackToNew}
+        failureReason={intentFailureReason}
       />
     );
   }

@@ -35,6 +35,8 @@ export interface ForwardingQuote {
   protocolFee: bigint;
   quotedAt: number;
   hookData: `0x${string}`;
+  /** User-authorized ceiling; execution still uses only the fresh quoted fee. */
+  feeCap: bigint;
 }
 
 export async function getForwardingQuote(params: {
@@ -68,6 +70,7 @@ export async function getForwardingQuote(params: {
   const protocolFee = (amount * scaledBps + 99_999_999n) / 100_000_000n;
   const forwardFee = BigInt(forward);
   const maxFee = protocolFee + forwardFee;
-  if (forwardFee <= 0n || maxFee >= amount) throw new Error("Amount is too small for automatic claim fees");
-  return { maxFee, forwardFee, protocolFee, hookData, quotedAt: Date.now() };
+  const feeCap = (maxFee * 120n + 99n) / 100n;
+  if (forwardFee <= 0n || feeCap >= amount) throw new Error("Amount is too small for automatic claim fees");
+  return { maxFee, feeCap, forwardFee, protocolFee, hookData, quotedAt: Date.now() };
 }

@@ -164,17 +164,17 @@ export async function estimateBridgeFee(
     const appFee = getFastTransferFeeQuote({ amount: amountBigInt, transferSpeed: speed, sourceChainId }).feeAmount;
     const bridgeAmount = amountBigInt - appFee;
     const quote = await getForwardingQuote({ sourceChainId, destinationChainId, amount: bridgeAmount, speed, isTestnet, recipientAddress: params.recipientAddress });
-    if (quote.maxFee >= bridgeAmount) throw new Error("Amount too small for automatic claim fees");
+    if (quote.feeCap >= bridgeAmount) throw new Error("Amount too small for automatic claim fees");
     return {
       fees: [
         { amount: formatAmount(quote.protocolFee), type: "provider" },
         { amount: formatAmount(quote.forwardFee), type: "forwarder" },
         ...(appFee > 0n ? [{ amount: formatAmount(appFee), type: "kit" as const }] : []),
       ],
-      gasFees: [], receivedAmount: formatAmount(bridgeAmount - quote.maxFee), sourceAmount: amount,
+      gasFees: [], receivedAmount: formatAmount(bridgeAmount - quote.feeCap), sourceAmount: amount,
       estimatedTime: getFinalityEstimate(chainName, speed === "fast" ? BridgeKitSpeed.FAST : BridgeKitSpeed.SLOW)?.averageTime ?? "—",
       speed, sourceDomain, destinationDomain,
-      forwardingMaxFee: quote.maxFee.toString(), forwardingQuotedAt: quote.quotedAt, forwardingRecipient: params.recipientAddress,
+      forwardingMaxFee: quote.feeCap.toString(), forwardingQuotedAt: quote.quotedAt, forwardingRecipient: params.recipientAddress,
     };
   }
 

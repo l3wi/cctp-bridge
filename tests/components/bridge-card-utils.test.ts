@@ -47,4 +47,14 @@ describe("bridge-card estimate fee labels", () => {
     expect(labels.feeLabel).toBe("0.000500 USDC");
     expect(labels.receiveLabel).toBe("0.999500 USDC");
   });
+  it("bundles app fees with the authorized Circle cap and labels the receive floor", () => {
+    const labels = getEstimateLabels({
+      speed: "fast", estimate: { ...estimate, forwardingMaxFee: "72000" },
+      isEstimating: false, amountIsValid: true, chainSelectionValid: true, hasAmountInput: true,
+      amount: { str: "1", bigInt: 1_000_000n }, activeSourceChainId: null, transferSpeedLabel: "~20 seconds",
+    });
+    expect(labels.feeLabel).toBe("Up to 0.072400 USDC");
+    expect(labels.receiveLabel).toBe("At least 0.927600 USDC");
+  });
+
 });

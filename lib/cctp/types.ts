@@ -124,6 +124,7 @@ export interface BurnParams {
 
 /** Result from burn operation */
 export interface BurnResult {
+  errorCode?: string;
   automaticClaim?: boolean;
   forwardingMaxFee?: string;
   success: boolean;

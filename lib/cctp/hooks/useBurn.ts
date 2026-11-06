@@ -229,7 +229,7 @@ export function useBurn() {
             isTestnet: BRIDGEKIT_ENV === "testnet", recipientAddress: params.recipientAddress,
           });
           if (!params.forwardingMaxFee || !/^\d+$/.test(params.forwardingMaxFee) || quote.maxFee > BigInt(params.forwardingMaxFee)) {
-            throw new Error("Automatic claim fees changed. Please refresh the quote and try again.");
+            throw Object.assign(new Error("Automatic claim fees changed. Please refresh the quote and try again."), { code: "FORWARDING_FEE_CHANGED" });
           }
           burnConfig.maxFee = quote.maxFee;
         }
@@ -354,7 +354,7 @@ export function useBurn() {
 	        if (params.automaticClaim) {
           const quote = await getForwardingQuote({ sourceChainId, destinationChainId: params.destinationChainId, amount: bridgeAmount, speed: params.transferSpeed, isTestnet, recipientAddress: params.recipientAddress });
           if (!params.forwardingMaxFee || !/^\d+$/.test(params.forwardingMaxFee) || quote.maxFee > BigInt(params.forwardingMaxFee)) {
-            throw new Error("Automatic claim fees changed. Please refresh the quote and try again.");
+            throw Object.assign(new Error("Automatic claim fees changed. Please refresh the quote and try again."), { code: "FORWARDING_FEE_CHANGED" });
           }
           maxFee = quote.maxFee;
         } else if (params.transferSpeed === "fast") {
@@ -392,7 +392,7 @@ export function useBurn() {
         const hookData = params.automaticClaim ? getForwardingHookData(params.destinationChainId, params.recipientAddress) : undefined;
 
         // Build transaction
-	        const { transaction, messageAccount } = await buildDepositForBurnTransaction({
+	        let { transaction, messageAccount } = await buildDepositForBurnTransaction({
 	          connection,
 	          user: solanaWallet.publicKey,
 	          amount: bridgeAmount,
@@ -413,7 +413,17 @@ export function useBurn() {
 
         if (params.automaticClaim) {
           const fresh = await getForwardingQuote({ sourceChainId, destinationChainId: params.destinationChainId, amount: bridgeAmount, speed: params.transferSpeed, isTestnet, recipientAddress: params.recipientAddress });
-          if (fresh.maxFee !== maxFee) throw new Error("Automatic claim fees changed. Please refresh the quote and try again.");
+          if (!params.forwardingMaxFee || fresh.maxFee > BigInt(params.forwardingMaxFee)) {
+            throw Object.assign(new Error("Automatic claim fees changed. Please refresh the quote and try again."), { code: "FORWARDING_FEE_CHANGED" });
+          }
+          if (fresh.maxFee !== maxFee) {
+            maxFee = fresh.maxFee;
+            ({ transaction, messageAccount } = await buildDepositForBurnTransaction({
+              connection, user: solanaWallet.publicKey, amount: bridgeAmount,
+              destinationChainId: params.destinationChainId, mintRecipient: params.recipientAddress,
+              maxFee, minFinalityThreshold, sourceChainId, appFeeAmount, appFeeRecipient, hookData,
+            }));
+          }
         }
 
         // Sign with wallet
@@ -465,6 +475,7 @@ export function useBurn() {
           await recoverStandardFee(address);
           const preview = await previewStandardFeeClient({ address, sourceChainId: params.sourceChainId, amountAtomic: params.amount.toString() });
           let forwardingFeeAtomic: string | undefined;
+          let forwardingFeeCapAtomic: string | undefined;
           if (preview.chargeFee && params.automaticClaim) {
             const quote = await getForwardingQuote({
               sourceChainId: params.sourceChainId, destinationChainId: params.destinationChainId,
@@ -472,14 +483,15 @@ export function useBurn() {
               isTestnet: BRIDGEKIT_ENV === "testnet", recipientAddress: params.recipientAddress,
             });
             if (!params.forwardingMaxFee || !/^\d+$/.test(params.forwardingMaxFee) || quote.maxFee > BigInt(params.forwardingMaxFee)) {
-              throw new Error("Automatic claim fees changed. Please refresh the quote and try again.");
+              throw Object.assign(new Error("Automatic claim fees changed. Please refresh the quote and try again."), { code: "FORWARDING_FEE_CHANGED" });
             }
             forwardingFeeAtomic = quote.maxFee.toString();
+            forwardingFeeCapAtomic = params.forwardingMaxFee;
           }
-          if (preview.chargeFee && !await confirmStandardFee({ ...preview, amountAtomic: params.amount.toString(), forwardingFeeAtomic })) {
+          if (preview.chargeFee && !await confirmStandardFee({ ...preview, amountAtomic: params.amount.toString(), forwardingFeeAtomic, forwardingFeeCapAtomic })) {
             throw Object.assign(new Error("User rejected fee confirmation"), { code: 4001 });
           }
-          if (forwardingFeeAtomic) params = { ...params, forwardingMaxFee: forwardingFeeAtomic };
+          if (forwardingFeeCapAtomic) params = { ...params, forwardingMaxFee: forwardingFeeCapAtomic };
           const currentAddress = isSolanaChain(params.sourceChainId) ? currentWallets.current.solanaAddress : currentWallets.current.evmAddress;
           if (!currentWallets.current.mounted || currentAddress !== address) throw new Error("Wallet changed. Please restart the bridge.");
           const request: StandardFeeRequest = {

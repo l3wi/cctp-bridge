@@ -167,7 +167,7 @@ describe("useBurn EVM chain assertions", () => {
     expect(reserveFeeMock).toHaveBeenCalledWith(expect.objectContaining({ sourceChainId: 8453 }));
   });
 
-  it("bundles the charged Standard forwarding quote and caps burn at the confirmed total", async () => {
+  it("bundles the charged Standard forwarding quote and preserves the explicitly confirmed fee cap", async () => {
     previewFeeMock.mockResolvedValue({ volumeAtomic: "1000000000000", chargeFee: true, feeAtomic: "100000" });
     reserveFeeMock.mockResolvedValue({ id: "test", token: "token", chargeFee: true, feeAtomic: "100000", recipient: "0x5555555555555555555555555555555555555555" });
     const prepared = await prepareEvmBurnMock();
@@ -180,13 +180,13 @@ describe("useBurn EVM chain assertions", () => {
         recipientAddress: "0x5555555555555555555555555555555555555555",
         transferSpeed: "standard", automaticClaim: true, forwardingMaxFee: "100000",
       });
-      expect(burn.success).toBe(false);
-      expect(burn.error).toContain("fees changed");
+      expect(burn.success).toBe(true);
+      expect(burn.circleFastFee).toBe(60_001n);
     });
     expect(getForwardingQuoteMock).toHaveBeenCalledWith(expect.objectContaining({ amount: 900_000n }));
-    expect(confirmFeeMock).toHaveBeenCalledWith(expect.objectContaining({ feeAtomic: "100000", forwardingFeeAtomic: "60000" }));
-    expect(prepareEvmBurnMock).toHaveBeenCalledWith(expect.objectContaining({ forwardingMaxFee: "60000" }));
-    expect(sendTransactionMock).toHaveBeenCalledTimes(1);
+    expect(confirmFeeMock).toHaveBeenCalledWith(expect.objectContaining({ feeAtomic: "100000", forwardingFeeAtomic: "60000", forwardingFeeCapAtomic: "100000" }));
+    expect(prepareEvmBurnMock).toHaveBeenCalledWith(expect.objectContaining({ forwardingMaxFee: "100000" }));
+    expect(sendTransactionMock).toHaveBeenCalledTimes(2);
   });
   it("uses the latest quote rather than an oversized authorization after approval", async () => {
     const prepared = await prepareEvmBurnMock();
@@ -204,7 +204,7 @@ describe("useBurn EVM chain assertions", () => {
     });
     expect(sendTransactionMock).toHaveBeenCalledTimes(2);
   });
-  it("does not broadcast a forwarding burn if fees increase during approval", async () => {
+  it("does not broadcast a forwarding burn if fees exceed authorization during approval", async () => {
     const prepared = await prepareEvmBurnMock();
     prepareEvmBurnMock.mockResolvedValue({ ...prepared, maxFee: 60_000n });
     getForwardingQuoteMock.mockResolvedValue({ maxFee: 60_001n });
@@ -217,6 +217,7 @@ describe("useBurn EVM chain assertions", () => {
       });
       expect(burn.success).toBe(false);
       expect(burn.error).toContain("fees changed");
+      expect(burn.errorCode).toBe("FORWARDING_FEE_CHANGED");
     });
     expect(sendTransactionMock).toHaveBeenCalledTimes(1); // Approval only.
   });
@@ -300,6 +301,21 @@ describe("useBurn Solana finality and fast fee safety", () => {
     expect(signSolanaTransactionMock).toHaveBeenCalledTimes(1);
     expect(sendSolanaTransactionNoConfirmMock).toHaveBeenCalledTimes(1);
   });
+  it("rebuilds Solana forwarding at the latest fee within the authorized ceiling", async () => {
+    getForwardingQuoteMock.mockReset().mockResolvedValueOnce({ maxFee: 60_000n }).mockResolvedValueOnce({ maxFee: 60_001n });
+    const { result } = renderHook(() => useBurn());
+    await act(async () => {
+      const burn = await result.current.executeBurn({ sourceChainId: "Solana_Devnet", destinationChainId: 84532,
+        amount: 1_000_000n, recipientAddress: "0x5555555555555555555555555555555555555555",
+        transferSpeed: "standard", automaticClaim: true, forwardingMaxFee: "72000" });
+      expect(burn.success).toBe(true);
+      expect(burn.circleFastFee).toBe(60_001n);
+    });
+    expect(buildDepositForBurnTransactionMock).toHaveBeenCalledTimes(2);
+    expect(buildDepositForBurnTransactionMock).toHaveBeenLastCalledWith(expect.objectContaining({ maxFee: 60_001n }));
+    expect(signSolanaTransactionMock).toHaveBeenCalledTimes(1);
+  });
+
   it("builds fast Solana burns with the CCTP v2 fast finality threshold", async () => {
     const { result } = renderHook(() => useBurn());
 
