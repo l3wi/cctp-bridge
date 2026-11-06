@@ -162,7 +162,7 @@
       "summary": "Solana claim handling is more resilient, with clearer completion state and fewer failed claim attempts.",
       "highlights": [
         "Improved Solana claim confirmation before marking a transfer complete.",
-        "Reduced errors caused by missing or incomplete Solana account metadata.",
+        "Fewer claim errors when recipient accounts need setup.",
         "Made pending claim status less likely to appear stale after a mint completes."
       ],
       "audience": ["solana-users"],
@@ -196,7 +196,7 @@
       "summary": "Transfer tracking now has clearer status updates across burn, attestation, and mint steps.",
       "highlights": [
         "Added richer bridge tracking pages for pending transactions.",
-        "Improved transfer polling so status changes appear more consistently.",
+        "Transfer status updates appear more consistently.",
         "Made claim readiness and completion states easier to follow."
       ],
       "audience": ["all-users"],
