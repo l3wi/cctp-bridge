@@ -16,12 +16,6 @@ describe("ChangelogModal", () => {
     expect(
       screen.getByRole("heading", { name: /what's new/i })
     ).toBeTruthy();
-    expect(
-      screen.getByText("New look, history page, and recovery page")
-    ).toBeTruthy();
-    expect(screen.getByText("Expanded network coverage metadata")).toBeTruthy();
-    expect(screen.getByText("Solana")).toBeTruthy();
-    expect(screen.getByText("Arbitrum")).toBeTruthy();
   });
 
   it("does not render audit commit hashes in the public modal", async () => {

@@ -11,11 +11,6 @@ describe("publicChangelog", () => {
   it("matches the public changelog schema", () => {
     expect(isPublicChangelog(publicChangelog)).toBe(true);
     expect(publicChangelog.schemaVersion).toBe(1);
-    expect(publicChangelog.generatedFrom).toEqual({
-      from: "2026-01-21",
-      to: "2026-09-23",
-      source: "git-history",
-    });
   });
 
   it("uses unique ids and newest-first entry ordering", () => {

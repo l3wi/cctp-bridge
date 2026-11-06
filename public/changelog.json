@@ -2,10 +2,41 @@
   "schemaVersion": 1,
   "generatedFrom": {
     "from": "2026-01-21",
-    "to": "2026-09-23",
+    "to": "2026-11-06",
     "source": "git-history"
   },
   "entries": [
+    {
+      "id": "2026-11-automatic-claims",
+      "date": "2026-11-06",
+      "category": "bridge",
+      "title": "Automatic claims with Circle Forwarding",
+      "summary": "Supported EVM and Solana transfers can now arrive automatically, without a separate destination claim.",
+      "highlights": [
+        "Automatic claim is enabled by default on supported routes, with a toggle for manual delivery.",
+        "Quotes include forwarding fees and show the maximum total fee before you bridge.",
+        "Transfer tracking continues until delivery is confirmed on the destination.",
+        "Arc Max reserves USDC for approval and bridge gas."
+      ],
+      "audience": ["all-users", "evm-users", "solana-users"],
+      "importance": "major",
+      "references": { "commits": ["e8d3248"] }
+    },
+    {
+      "id": "2026-11-solana-connection-recovery",
+      "date": "2026-11-06",
+      "category": "reliability",
+      "title": "More reliable Solana claims and balances",
+      "summary": "Solana claims recover automatically when a network provider is unavailable, and temporary connection problems no longer replace your balance with zero.",
+      "highlights": [
+        "Claims automatically try another network provider when a connection fails.",
+        "Slow status checks no longer pile up while you wait.",
+        "Failed balance refreshes keep the last known balance visible."
+      ],
+      "audience": ["solana-users", "returning-users"],
+      "importance": "patch",
+      "references": { "commits": ["e8d3248"] }
+    },
     {
       "id": "2026-09-redesign-and-docs",
       "date": "2026-09-23",
@@ -28,7 +59,7 @@
       "summary": "Refined the bridge interface and transaction handling for a clearer, more reliable transfer flow.",
       "highlights": [
         "Improved the confirmation flow before wallet approval.",
-        "Refactored transfer construction and execution handoff across supported networks.",
+        "Clearer transfer progress after you approve the bridge in your wallet.",
         "Compacted bridge and status-card layouts to remove unnecessary empty space."
       ],
       "audience": ["all-users", "evm-users", "solana-users"],
@@ -42,12 +73,11 @@
       "date": "2026-05-31",
       "category": "bridge",
       "title": "More chains and account support",
-      "summary": "The bridge now tracks the latest Circle and BridgeKit network metadata and supports gas-station enabled contract accounts.",
+      "summary": "More supported networks and gas-station enabled contract accounts are available in the bridge.",
       "highlights": [
-        "Updated Circle and BridgeKit metadata so newly supported mainnet and testnet routes can appear in the app.",
+        "Newly supported mainnet and testnet routes can appear in the app.",
         "Added support for gas-station enabled contract accounts in bridge flows.",
-        "Improved account and route error handling so unsupported paths fail with clearer messages.",
-        "Kept existing bridge review behavior aligned with the expanded network coverage."
+        "Improved account and route error handling so unsupported paths fail with clearer messages."
       ],
       "audience": ["all-users", "evm-users", "solana-users"],
       "importance": "major",
@@ -80,10 +110,10 @@
       "summary": "Bridge tracking, recovery, and claim execution now handle pending confirmations, Solana recipients, and expired attestations more safely.",
       "highlights": [
         "Waits for the source burn transaction to confirm before marking the burn step complete.",
-        "Keeps fresh bridge links in recovery while Circle Iris is still indexing or confirming the burn.",
-        "Enforces the intended Solana recipient wallet during claim and validates CCTP source and destination domains before signing.",
+        "Keeps fresh bridge links available while Circle is still confirming the transfer.",
+        "Checks the intended recipient and destination network before claim signing.",
         "Waits for refreshed attestations to become usable before enabling claim retries.",
-        "Prevents execute-intent retries from looping after validation, wallet, or user-rejection failures."
+        "Stops repeated wallet prompts after validation errors or a cancelled request."
       ],
       "audience": ["all-users", "solana-users", "returning-users"],
       "importance": "major",
@@ -113,11 +143,10 @@
       "date": "2026-04-16",
       "category": "ui",
       "title": "More consistent network icons",
-      "summary": "Supported networks now render with more reliable icon fallbacks, even when upstream icon metadata is incomplete.",
+      "summary": "Supported networks remain recognizable even when an icon is unavailable.",
       "highlights": [
         "Improved network icon handling across bridge forms and transaction views.",
-        "Added fallback display support for newer supported networks.",
-        "Updated chain metadata so routes stay recognizable when icons are missing."
+        "Added fallback display support for newer supported networks."
       ],
       "audience": ["all-users"],
       "importance": "minor",
@@ -180,12 +209,12 @@
       "id": "2026-02-network-coverage",
       "date": "2026-02-19",
       "category": "chains",
-      "title": "Expanded network coverage metadata",
-      "summary": "The app now uses generated Circle and BridgeKit metadata with app-managed routing to support and display a broader set of CCTP routes more reliably.",
+      "title": "Expanded network coverage",
+      "summary": "More supported networks are available, with clearer route selection and more reliable connections.",
       "highlights": [
         "Improved route discovery and chain display for supported CCTP networks.",
-        "Added app-managed network metadata for mainnet and matching testnet routes.",
-        "Improved fallback behavior when a public RPC endpoint is unavailable."
+        "Supports mainnet routes and their matching testnet networks.",
+        "Automatically tries another connection when a network provider is unavailable."
       ],
       "networks": [
         "Ethereum",
