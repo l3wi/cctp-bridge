@@ -10,6 +10,9 @@ import type { BridgeIntent } from "@/lib/bridgeIntent";
 const mockState = vi.hoisted(() => ({
   evmAddress: "0x8fc8ac124be6cbf4b54aa1b24d27e04156979b7d",
   evmConnected: true,
+  quoteError: false,
+  quoteReady: false,
+  staleQuoteRecipient: undefined as string | undefined,
   solanaRecipient: "4Nd1m4h4U6fMeDvfMqk7y6jJxGfSPMaqkN8R7nJxQfQF" as string | undefined,
 }));
 
@@ -25,13 +28,14 @@ const ARB_DEF = {
   type: "evm",
   chainId: 42161,
   name: "Arbitrum",
-  cctp: { domain: 3 },
+  cctp: { domain: 3, contracts: { v2: {} } },
 };
+const ARC_DEF = { type: "evm", chainId: 5042, name: "Arc", cctp: { domain: 26, contracts: { v2: {} }, forwarderSupported: { destination: true } } };
 const SOL_DEF = {
   type: "solana",
   chain: "Solana",
   name: "Solana",
-  cctp: { domain: 5 },
+  cctp: { domain: 5, contracts: { v2: {} }, forwarderSupported: { destination: true } },
 };
 
 vi.mock("wagmi", () => ({
@@ -39,7 +43,7 @@ vi.mock("wagmi", () => ({
     address: mockState.evmConnected ? mockState.evmAddress : undefined,
     chain: mockState.evmConnected ? ARB_CHAIN : undefined,
   }),
-  useChains: () => [ARB_CHAIN],
+  useChains: () => [ARB_CHAIN, { id: 5042, name: "Arc" }],
   useSwitchChain: () => ({
     switchChain: switchChainMock,
   }),
@@ -66,11 +70,12 @@ vi.mock("@/lib/hooks/useCrossEcosystemBridge", () => ({
 }));
 
 vi.mock("@/lib/bridgeConfig", () => ({
-  getAllSupportedChains: () => [ARB_DEF, SOL_DEF],
+  BRIDGEKIT_ENV: "mainnet",
+  getAllSupportedChains: () => [ARB_DEF, SOL_DEF, ARC_DEF],
   resolveBridgeChainUniversal: (chainId: string | number) =>
-    chainId === "Solana" ? SOL_DEF : ARB_DEF,
+    chainId === "Solana" ? SOL_DEF : chainId === 5042 ? ARC_DEF : ARB_DEF,
   getBridgeChainByIdUniversal: (chainId: string | number) =>
-    chainId === "Solana" ? SOL_DEF : ARB_DEF,
+    chainId === "Solana" ? SOL_DEF : chainId === 5042 ? ARC_DEF : ARB_DEF,
   getCctpConfirmationsUniversal: () => ({ fast: 3, standard: 32 }),
 }));
 
@@ -118,11 +123,11 @@ vi.mock("@/lib/cctp/estimate", () => ({
 
 
 vi.mock("@tanstack/react-query", () => ({
-  useQuery: () => ({
-    data: null,
+  useQuery: (options: { queryKey: unknown[] }) => ({
+    data: mockState.quoteReady ? { fees: [{ type: "forwarder", amount: "0.060000" }], forwardingMaxFee: "60000", forwardingQuotedAt: Date.now(), forwardingRecipient: mockState.staleQuoteRecipient ?? options.queryKey[options.queryKey.length - 1] } : null,
     isFetching: false,
-    error: null,
-    isError: false,
+    error: mockState.quoteError ? new Error("offline") : null,
+    isError: mockState.quoteError,
   }),
 }));
 
@@ -179,6 +184,9 @@ describe("BridgeCard recipient lock integration", () => {
   beforeEach(() => {
     mockState.evmAddress = "0x8fc8ac124be6cbf4b54aa1b24d27e04156979b7d";
     mockState.evmConnected = true;
+    mockState.quoteReady = true;
+    mockState.staleQuoteRecipient = undefined;
+    mockState.quoteError = false;
     mockState.solanaRecipient = "4Nd1m4h4U6fMeDvfMqk7y6jJxGfSPMaqkN8R7nJxQfQF";
     bridgeMock.mockReset();
     toastMock.mockReset();
@@ -194,6 +202,50 @@ describe("BridgeCard recipient lock integration", () => {
       destination: { address: params.targetAddress || "", chain: SOL_DEF },
       steps: [],
     }));
+  });
+
+  it("defaults automatic claim on for Arc and preserves opt-out", async () => {
+    const user = userEvent.setup();
+    mockState.quoteReady = true;
+    render(<BridgeCard initialChains={{ sourceChainId: 42161, targetChainId: 5042 }} />);
+    const toggle = await screen.findByRole("switch", { name: "Automatic claim" }) as HTMLInputElement;
+    expect(toggle.checked).toBe(true);
+    await user.click(toggle);
+    expect(toggle.checked).toBe(false);
+    await user.type(screen.getByPlaceholderText("0.00"), "1");
+    await user.click(screen.getByRole("button", { name: "Bridge Fast" }));
+    await waitFor(() => expect(bridgeMock).toHaveBeenCalledTimes(1));
+    expect(bridgeMock.mock.calls[0][0].automaticClaim).toBe(false);
+  });
+
+  it("defaults automatic claim on for Solana destinations and sends its quoted cap", async () => {
+    const user = userEvent.setup();
+    render(<BridgeCard />);
+    const toggle = await screen.findByRole("switch", { name: "Automatic claim" }) as HTMLInputElement;
+    expect(toggle.checked).toBe(true);
+    await user.type(screen.getByPlaceholderText("0.00"), "1");
+    await user.click(screen.getByRole("button", { name: "Bridge Fast" }));
+    await waitFor(() => expect(bridgeMock).toHaveBeenCalledTimes(1));
+    expect(bridgeMock.mock.calls[0][0]).toMatchObject({ automaticClaim: true, forwardingMaxFee: "60000", targetAddress: mockState.solanaRecipient });
+  });
+
+  it("does not submit a cached automatic quote for a different recipient", async () => {
+    const user = userEvent.setup();
+    mockState.staleQuoteRecipient = "OldRecipient11111111111111111111111111111111";
+    render(<BridgeCard />);
+    await user.type(screen.getByPlaceholderText("0.00"), "1");
+    await user.click(screen.getByRole("button", { name: "Bridge Fast" }));
+    expect(bridgeMock).not.toHaveBeenCalled();
+    expect(toastMock).toHaveBeenCalledWith(expect.objectContaining({ title: "Refresh automatic claim fees" }));
+  });
+
+  it("blocks automatic submission when the quote is unavailable", async () => {
+    const user = userEvent.setup();
+    mockState.quoteError = true;
+    render(<BridgeCard initialChains={{ sourceChainId: 42161, targetChainId: 5042 }} />);
+    await user.type(screen.getByPlaceholderText("0.00"), "1");
+    expect((screen.getByRole("button", { name: "Automatic claim fees unavailable" }) as HTMLButtonElement).disabled).toBe(true);
+    expect(bridgeMock).not.toHaveBeenCalled();
   });
 
   it("keeps the route source when an EVM wallet connects on another network", async () => {
@@ -304,7 +356,8 @@ describe("BridgeCard recipient lock integration", () => {
         loadedTransaction={{
           hash: `0x${"d".repeat(64)}`,
           originChain: 42161,
-          targetChain: "Solana",
+          targetChain: 5042,
+          automaticClaim: true,
           targetAddress: loadedTargetAddress,
           amount: "5.00",
           status: "pending",
@@ -325,11 +378,12 @@ describe("BridgeCard recipient lock integration", () => {
     });
 
     const bridgeResult = lastBridgingStateProps.value?.bridgeResult as
-      | { source?: { address?: string }; destination?: { address?: string } }
+      | { source?: { address?: string }; destination?: { address?: string; useForwarder?: boolean } }
       | undefined;
 
     expect(bridgeResult?.source?.address).toBe("");
     expect(bridgeResult?.destination?.address).toBe(loadedTargetAddress);
+    expect(bridgeResult?.destination?.useForwarder).toBe(true);
   });
 });
 

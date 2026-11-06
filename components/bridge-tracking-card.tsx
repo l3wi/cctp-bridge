@@ -91,6 +91,7 @@ export function BridgeTrackingCard({
       },
       destination: {
         address: transaction.targetAddress || "",
+        useForwarder: transaction.automaticClaim === true,
         chain: toChainDefinition(effectiveDestinationChain),
       },
       steps: transaction.steps || [],
@@ -100,6 +101,7 @@ export function BridgeTrackingCard({
     transaction.steps,
     transaction.amount,
     transaction.bridgeState,
+    transaction.automaticClaim,
     transaction.targetAddress,
     sourceChainDef,
     effectiveDestinationChain,

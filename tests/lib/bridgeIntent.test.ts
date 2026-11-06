@@ -142,3 +142,18 @@ describe("parseBridgeIntent", () => {
     });
   });
 });
+
+describe("automatic claim intent authorization", () => {
+  const intent: BridgeIntent = {
+    sourceChainId: 42161, targetChainId: 5042, amount: "1000", targetAddress: "0x1111111111111111111111111111111111111111", transferType: "standard",
+    automaticClaim: true, forwardingMaxFee: "60000",
+  };
+  it("preserves claim method and fee authorization across navigation", () => {
+    expect(parseBridgeIntent(serializeBridgeIntent(intent))).toEqual(intent);
+  });
+  it("rejects automatic claiming without a valid fee authorization", () => {
+    const params = serializeBridgeIntent(intent);
+    params.set("forwardingMaxFee", "-1");
+    expect(parseBridgeIntentResult(params)).toEqual({ ok: false, reason: "invalid_forwarding" });
+  });
+});

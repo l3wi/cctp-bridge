@@ -3,6 +3,9 @@ import { Button } from "@/components/ui/button";
 import type { ClaimSectionProps } from "./types";
 
 export function ClaimSection({
+  automaticClaim,
+  forwardingDelayed,
+  onCheckForwarding,
   showClaimButton,
   amount,
   destinationLabel,
@@ -17,6 +20,15 @@ export function ClaimSection({
   isAwaitingReattestation,
   reattestTimedOut,
 }: ClaimSectionProps) {
+  if (automaticClaim) return (
+    <div className="flex flex-col gap-2">
+      <Button className="w-full" disabled={!forwardingDelayed} onClick={onCheckForwarding}>
+        {forwardingDelayed ? "Check claim status" : "Claiming automatically…"}
+      </Button>
+      <p className="text-xs text-slate-400 text-center">{forwardingDelayed ? "Your transfer is sent. The claim is taking longer." : "No action needed. Circle will complete the claim."}</p>
+    </div>
+  );
+
   // Awaiting new attestation after auto re-request — show polling spinner
   if (isAwaitingReattestation) {
     return (

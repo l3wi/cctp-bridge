@@ -5,6 +5,9 @@ import { Keypair, Transaction } from "@solana/web3.js";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useBurn } from "@/lib/cctp/hooks/useBurn";
 
+const getForwardingQuoteMock = vi.hoisted(() => vi.fn());
+vi.mock("@/lib/cctp/forwarding", () => ({ getForwardingQuote: getForwardingQuoteMock, getForwardingHookData: () => "0x636374702d666f72776172640000000000000000000000000000000000000000" }));
+const prepareEvmBurnMock = vi.hoisted(() => vi.fn());
 const sendTransactionMock = vi.hoisted(() => vi.fn());
 const waitForTransactionReceiptMock = vi.hoisted(() => vi.fn());
 const getTransactionReceiptMock = vi.hoisted(() => vi.fn());
@@ -109,18 +112,7 @@ vi.mock("@/lib/cctp/evm/burn", () => ({
 	    data: "0xbridge",
 	  }),
 	  calculateMaxFee: calculateMaxFeeMock,
-	  prepareEvmBurn: vi.fn().mockResolvedValue({
-	    tokenMessenger: "0x2222222222222222222222222222222222222222",
-	    usdcAddress: "0x4444444444444444444444444444444444444444",
-	    approvalSpender: "0x2222222222222222222222222222222222222222",
-	    approvalAmount: 1_000_000n,
-	    bridgeAmount: 1_000_000n,
-	    destinationDomain: 6,
-	    mintRecipient: `0x${"0".repeat(24)}5555555555555555555555555555555555555555`,
-	    minFinalityThreshold: 2000,
-	    maxFee: 0n,
-	    appFeeAmount: 0n,
-	  }),
+	  prepareEvmBurn: prepareEvmBurnMock,
 	}));
 
 vi.mock("@/lib/cctp/solana/burn", () => ({
@@ -142,6 +134,18 @@ describe("useBurn EVM chain assertions", () => {
     waitForTransactionReceiptMock.mockResolvedValue({ status: "success" });
     getTransactionReceiptMock.mockResolvedValue({ status: "success" });
     checkAllowanceMock.mockResolvedValue(1_000_000n);
+    prepareEvmBurnMock.mockReset().mockResolvedValue({
+      tokenMessenger: "0x2222222222222222222222222222222222222222",
+      usdcAddress: "0x4444444444444444444444444444444444444444",
+      approvalSpender: "0x2222222222222222222222222222222222222222",
+      approvalAmount: 1_000_000n,
+      bridgeAmount: 1_000_000n,
+      destinationDomain: 6,
+      mintRecipient: `0x${"0".repeat(24)}5555555555555555555555555555555555555555`,
+      minFinalityThreshold: 2000,
+      maxFee: 0n,
+      appFeeAmount: 0n,
+    });
     calculateMaxFeeMock.mockResolvedValue(100n);
     createSolanaConnectionMock.mockReturnValue({});
     buildDepositForBurnTransactionMock.mockResolvedValue(createMockSolanaBurnResult());
@@ -163,6 +167,59 @@ describe("useBurn EVM chain assertions", () => {
     expect(reserveFeeMock).toHaveBeenCalledWith(expect.objectContaining({ sourceChainId: 8453 }));
   });
 
+  it("bundles the charged Standard forwarding quote and caps burn at the confirmed total", async () => {
+    previewFeeMock.mockResolvedValue({ volumeAtomic: "1000000000000", chargeFee: true, feeAtomic: "100000" });
+    reserveFeeMock.mockResolvedValue({ id: "test", token: "token", chargeFee: true, feeAtomic: "100000", recipient: "0x5555555555555555555555555555555555555555" });
+    const prepared = await prepareEvmBurnMock();
+    prepareEvmBurnMock.mockResolvedValue({ ...prepared, maxFee: 60_000n });
+    getForwardingQuoteMock.mockResolvedValueOnce({ maxFee: 60_000n }).mockResolvedValueOnce({ maxFee: 60_001n });
+    const { result } = renderHook(() => useBurn());
+    await act(async () => {
+      const burn = await result.current.executeBurn({
+        sourceChainId: 8453, destinationChainId: 5042002, amount: 1_000_000n,
+        recipientAddress: "0x5555555555555555555555555555555555555555",
+        transferSpeed: "standard", automaticClaim: true, forwardingMaxFee: "100000",
+      });
+      expect(burn.success).toBe(false);
+      expect(burn.error).toContain("fees changed");
+    });
+    expect(getForwardingQuoteMock).toHaveBeenCalledWith(expect.objectContaining({ amount: 900_000n }));
+    expect(confirmFeeMock).toHaveBeenCalledWith(expect.objectContaining({ feeAtomic: "100000", forwardingFeeAtomic: "60000" }));
+    expect(prepareEvmBurnMock).toHaveBeenCalledWith(expect.objectContaining({ forwardingMaxFee: "60000" }));
+    expect(sendTransactionMock).toHaveBeenCalledTimes(1);
+  });
+  it("uses the latest quote rather than an oversized authorization after approval", async () => {
+    const prepared = await prepareEvmBurnMock();
+    prepareEvmBurnMock.mockResolvedValue({ ...prepared, maxFee: 60_000n });
+    getForwardingQuoteMock.mockResolvedValue({ maxFee: 50_000n });
+    const { result } = renderHook(() => useBurn());
+    await act(async () => {
+      const burn = await result.current.executeBurn({
+        sourceChainId: 8453, destinationChainId: 5042002, amount: 1_000_000n,
+        recipientAddress: "0x5555555555555555555555555555555555555555",
+        transferSpeed: "standard", automaticClaim: true, forwardingMaxFee: "900000000",
+      });
+      expect(burn.success).toBe(true);
+      expect(burn.circleFastFee).toBe(50_000n);
+    });
+    expect(sendTransactionMock).toHaveBeenCalledTimes(2);
+  });
+  it("does not broadcast a forwarding burn if fees increase during approval", async () => {
+    const prepared = await prepareEvmBurnMock();
+    prepareEvmBurnMock.mockResolvedValue({ ...prepared, maxFee: 60_000n });
+    getForwardingQuoteMock.mockResolvedValue({ maxFee: 60_001n });
+    const { result } = renderHook(() => useBurn());
+    await act(async () => {
+      const burn = await result.current.executeBurn({
+        sourceChainId: 8453, destinationChainId: 5042002, amount: 1_000_000n,
+        recipientAddress: "0x5555555555555555555555555555555555555555",
+        transferSpeed: "standard", automaticClaim: true, forwardingMaxFee: "60000",
+      });
+      expect(burn.success).toBe(false);
+      expect(burn.error).toContain("fees changed");
+    });
+    expect(sendTransactionMock).toHaveBeenCalledTimes(1); // Approval only.
+  });
   it("rejects approval before sending when the wallet is not on the source chain", async () => {
     walletClientState.current!.chain.id = 1;
     const { result } = renderHook(() => useBurn());
@@ -229,6 +286,20 @@ describe("useBurn Solana finality and fast fee safety", () => {
     solanaWalletState.signTransaction = signSolanaTransactionMock;
   });
 
+  it("forwards Standard Solana burns without a destination wallet signature", async () => {
+    getForwardingQuoteMock.mockReset().mockResolvedValue({ maxFee: 60_000n });
+    const { result } = renderHook(() => useBurn());
+    await act(async () => {
+      const burn = await result.current.executeBurn({ sourceChainId: "Solana_Devnet", destinationChainId: 84532,
+        amount: 1_000_000n, recipientAddress: "0x5555555555555555555555555555555555555555",
+        transferSpeed: "standard", automaticClaim: true, forwardingMaxFee: "60000" });
+      expect(burn.success).toBe(true);
+      expect(burn.circleFastFee).toBe(60_000n);
+    });
+    expect(buildDepositForBurnTransactionMock).toHaveBeenCalledWith(expect.objectContaining({ maxFee: 60_000n, hookData: expect.stringContaining("63637470") }));
+    expect(signSolanaTransactionMock).toHaveBeenCalledTimes(1);
+    expect(sendSolanaTransactionNoConfirmMock).toHaveBeenCalledTimes(1);
+  });
   it("builds fast Solana burns with the CCTP v2 fast finality threshold", async () => {
     const { result } = renderHook(() => useBurn());
 

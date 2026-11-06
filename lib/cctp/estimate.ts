@@ -7,6 +7,7 @@ import { getCctpDomainSafe, IRIS_API_ENDPOINTS } from "./shared";
 import { getChainName, BRIDGEKIT_ENV } from "../bridgeConfig";
 import { getFinalityEstimate } from "../cctpFinality";
 import { TransferSpeed as BridgeKitSpeed } from "@/lib/cctp/transferSpeed";
+import { getForwardingQuote } from "./forwarding";
 import { getFastTransferFeeQuote } from "./fastTransferFee";
 import type {
   ChainId,
@@ -159,6 +160,24 @@ export async function estimateBridgeFee(
   const isTestnet = BRIDGEKIT_ENV === "testnet";
   const chainName = getChainName(sourceChainId);
 
+  if (params.automaticClaim) {
+    const appFee = getFastTransferFeeQuote({ amount: amountBigInt, transferSpeed: speed, sourceChainId }).feeAmount;
+    const bridgeAmount = amountBigInt - appFee;
+    const quote = await getForwardingQuote({ sourceChainId, destinationChainId, amount: bridgeAmount, speed, isTestnet, recipientAddress: params.recipientAddress });
+    if (quote.maxFee >= bridgeAmount) throw new Error("Amount too small for automatic claim fees");
+    return {
+      fees: [
+        { amount: formatAmount(quote.protocolFee), type: "provider" },
+        { amount: formatAmount(quote.forwardFee), type: "forwarder" },
+        ...(appFee > 0n ? [{ amount: formatAmount(appFee), type: "kit" as const }] : []),
+      ],
+      gasFees: [], receivedAmount: formatAmount(bridgeAmount - quote.maxFee), sourceAmount: amount,
+      estimatedTime: getFinalityEstimate(chainName, speed === "fast" ? BridgeKitSpeed.FAST : BridgeKitSpeed.SLOW)?.averageTime ?? "—",
+      speed, sourceDomain, destinationDomain,
+      forwardingMaxFee: quote.maxFee.toString(), forwardingQuotedAt: quote.quotedAt, forwardingRecipient: params.recipientAddress,
+    };
+  }
+
   // Standard transfer: no fees
   if (speed === "standard") {
     const timeEstimate = getFinalityEstimate(chainName, BridgeKitSpeed.SLOW);
@@ -285,7 +304,7 @@ export function getDestinationDeductedFee(
 ): number {
   if (!estimate?.fees) return 0;
   return estimate.fees.reduce(
-    (acc, fee) => acc + (fee.type === "provider" && fee.amount ? parseFloat(fee.amount) : 0),
+    (acc, fee) => acc + ((fee.type === "provider" || fee.type === "forwarder") && fee.amount ? parseFloat(fee.amount) : 0),
     0
   );
 }

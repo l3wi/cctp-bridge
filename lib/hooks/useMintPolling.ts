@@ -7,6 +7,7 @@ import { checkMintReadiness, checkSolanaMintStatus } from "@/lib/simulation";
 import { fetchAttestationUniversal, requestReattestation } from "@/lib/iris";
 import { useTransactionStore } from "@/lib/store/transactionStore";
 import { useToast } from "@/components/ui/use-toast";
+import { verifyForwardedMint } from "@/lib/cctp/forwardedReceipt";
 import { resolveEstimatedTimeLabel } from "@/lib/estimatedTime";
 
 // Polling configuration
@@ -36,6 +37,8 @@ export interface MintPollingState {
 }
 
 interface UseMintPollingParams {
+  automaticClaim?: boolean;
+  recipientAddress?: string;
   burnTxHash: string | null;
   sourceChainId: ChainId | undefined;
   destinationChainId: ChainId | undefined;
@@ -57,6 +60,8 @@ interface UseMintPollingParams {
  * for the fresh attestation every 15 seconds.
  */
 export function useMintPolling({
+  automaticClaim = false,
+  recipientAddress,
   burnTxHash,
   sourceChainId,
   destinationChainId,
@@ -124,8 +129,55 @@ export function useMintPolling({
     onStepsUpdateRef.current = onStepsUpdate;
   }, [displaySteps, onStepsUpdate]);
 
+  const [forwardingHash, setForwardingHash] = useState<string>();
+  const [forwardingDelayed, setForwardingDelayed] = useState(false);
+  const [forwardingRetry, setForwardingRetry] = useState(0);
+  useEffect(() => {
+    setForwardingHash(undefined);
+    setForwardingDelayed(false);
+    setMintSimulation(prev => ({ ...prev, alreadyMinted: false, attestationReady: false, canMint: false, error: undefined }));
+  }, [burnTxHash]);
+  const checkForwardingStatus = useCallback(() => setForwardingRetry(v => v + 1), []);
+
+  useEffect(() => {
+    if (!automaticClaim || isSuccess || !hasBurnCompleted || !burnTxHash || !sourceChainId || !destinationChainId || !recipientAddress) return;
+    let cancelled = false;
+    let inFlight = false;
+    const started = Date.now();
+    const check = async () => {
+      if (cancelled || inFlight || !isDocumentVisible()) return;
+      inFlight = true;
+      try {
+        const data = await fetchAttestationUniversal(sourceChainId, burnTxHash, { forceRefresh: true });
+        if (cancelled) return;
+        const hash = data?.forwardTxHash;
+        setForwardingDelayed(Date.now() - started > 120_000);
+        setMintSimulation(prev => ({ ...prev, checking: false, lastChecked: new Date(), attestationReady: data?.status === "complete", error: undefined }));
+        if (!data?.message || !hash) return;
+        setForwardingHash(hash);
+        updateTransaction(burnTxHash, { claimHash: hash });
+        const verified = await verifyForwardedMint(destinationChainId, hash, data.message, recipientAddress);
+        if (cancelled || !verified) return;
+        const steps = displayStepsRef.current.map(step => /attestation|attest|mint|claim|receive/i.test(step.name) ? { ...step, state: "success" as const, ...(/mint|claim|receive/i.test(step.name) ? { txHash: hash } : {}) } : step);
+        updateTransaction(burnTxHash, { status: "claimed", bridgeState: "success", completedAt: new Date(), steps, claimHash: hash, nonce: data.nonce });
+        setMintSimulation(prev => ({ ...prev, alreadyMinted: true, canMint: false }));
+        onStepsUpdateRef.current(steps);
+        cancelled = true;
+      } catch {
+        if (!cancelled) {
+          setForwardingDelayed(true);
+          setMintSimulation(prev => ({ ...prev, checking: false, error: "Could not check automatic claim status. Your transfer is still pending." }));
+        }
+      } finally { inFlight = false; }
+    };
+    void check();
+    const interval = setInterval(() => void check(), isSolanaChain(destinationChainId) ? SOLANA_POLL_INTERVAL_MS : EVM_MINT_POLL_INTERVAL_MS);
+    return () => { cancelled = true; clearInterval(interval); };
+  }, [automaticClaim, isSuccess, hasBurnCompleted, burnTxHash, sourceChainId, destinationChainId, recipientAddress, updateTransaction, isDocumentVisible, forwardingRetry]);
+
   // Check if we should poll EVM destinations
   const shouldPollEvm = useMemo(() => {
+    if (automaticClaim) return false;
     if (isSuccess) return false;
     if (mintSimulation.alreadyMinted) return false;
     if (mintSimulation.attestationReady || mintSimulation.canMint) return false;
@@ -146,6 +198,7 @@ export function useMintPolling({
 
     return true;
   }, [
+    automaticClaim,
     isSuccess,
     mintSimulation.alreadyMinted,
     mintSimulation.attestationReady,
@@ -162,6 +215,7 @@ export function useMintPolling({
 
   // Check if we should poll Solana attestation
   const shouldPollSolana = useMemo(() => {
+    if (automaticClaim) return false;
     if (isSuccess) return false;
     if (!burnTxHash || !sourceChainId || !destinationChainId) return false;
 
@@ -182,6 +236,7 @@ export function useMintPolling({
     // Old transfers still need fresh attestation checks when reopened.
     return true;
   }, [
+    automaticClaim,
     isSuccess,
     burnTxHash,
     sourceChainId,
@@ -839,6 +894,7 @@ export function useMintPolling({
 
   return {
     ...mintSimulation,
+    forwardingHash, forwardingDelayed, checkForwardingStatus,
     setAlreadyMinted,
     setMessageExpired,
     requestReattest,

@@ -85,3 +85,11 @@ The homepage and `/docs` guides use canonical URLs on `https://www.cctp.io` and 
 ### Prefilled USDC routes
 
 `/usdc` lists supported mainnet routes; `/usdc/{source}/{destination}` provides a prefilled bridge with server-rendered route titles and configuration-derived FAQs. Route preselection sets chains only and never initiates a transfer. The homepage retains its existing defaults. See [route-page architecture](docs/architecture/usdc-route-pages.md).
+
+### Automatic claims
+
+Transfers to destinations with Circle forwarding support default to automatic claim, using the route metadata for EVM and Solana chains. The existing form includes a compact toggle and a bundled Total fees row; source-network gas is paid separately. Circle receives a forwarding request in the burn hook and submits the destination claim, so the recipient needs no prior destination gas balance. Solana destinations include USDC associated token-account creation in the fee and hook.
+
+Forwarding fees are freshly quoted and checked again after approval. A fee increase beyond the authorized quote blocks the burn and requires a new quote. Saved transfers retain their actual delivery method; pending manual burns are not converted to forwarding. Completion requires a matching successful destination receipt, not merely an attestation or transaction hash.
+
+Arc Max uses current native balance and gas pricing, reserving twice a conservative 1,000,000-gas budget for approval and burn, rounded down to six-decimal spendable USDC. If gas pricing cannot be read, Max reports an error instead of selecting the entire balance.

@@ -4,6 +4,9 @@ import { act, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useMintPolling } from "@/lib/hooks/useMintPolling";
 
+const verifyForwardedMintMock = vi.hoisted(() => vi.fn());
+vi.mock("@/lib/cctp/forwardedReceipt", () => ({ verifyForwardedMint: verifyForwardedMintMock }));
+
 const updateTransactionMock = vi.hoisted(() => vi.fn());
 const toastMock = vi.hoisted(() => vi.fn());
 const checkMintReadinessMock = vi.hoisted(() => vi.fn());
@@ -443,4 +446,20 @@ describe("useMintPolling", () => {
     );
     expect(downgradeCalls).toHaveLength(1);
   });
+  it("keeps automatic claim polling after attestation and requires a verified destination receipt", async () => {
+    verifyForwardedMintMock.mockResolvedValue(false);
+    const hash = `0x${"a".repeat(64)}`;
+    fetchAttestationUniversalMock.mockResolvedValue({ status: "complete", nonce: "42", message: "0x1234", forwardTxHash: hash });
+    const onStepsUpdate = vi.fn();
+    renderHook(() => useMintPolling({ automaticClaim: true, recipientAddress: "0x1111111111111111111111111111111111111111", burnTxHash: `0x${"b".repeat(64)}`, sourceChainId: 1, destinationChainId: 5042, burnCompletedAt: new Date(), startedAt: new Date(), isSuccess: false, hasBurnCompleted: true, hasFetchAttestation: true, displaySteps: [{ name: "Burn", state: "success" }, { name: "Mint", state: "pending" }], onStepsUpdate }));
+    await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+    expect(checkMintReadinessMock).not.toHaveBeenCalled();
+    expect(verifyForwardedMintMock).toHaveBeenCalled();
+    expect(updateTransactionMock).not.toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ status: "claimed" }));
+    verifyForwardedMintMock.mockResolvedValue(true);
+    await act(async () => { await vi.advanceTimersByTimeAsync(5_000); });
+    expect(updateTransactionMock).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ status: "claimed", claimHash: hash }));
+    expect(onStepsUpdate).toHaveBeenCalledWith(expect.arrayContaining([expect.objectContaining({ name: "Mint", state: "success", txHash: hash })]));
+  });
+
 });

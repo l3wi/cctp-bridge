@@ -4,7 +4,7 @@ import { createContext, useCallback, useContext, useEffect, useRef, useState } f
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 
-interface FeeDetails { volumeAtomic: string; amountAtomic: string; feeAtomic: string }
+interface FeeDetails { volumeAtomic: string; amountAtomic: string; feeAtomic: string; forwardingFeeAtomic?: string }
 const ConfirmationContext = createContext<(details: FeeDetails) => Promise<boolean>>(async () => {
   throw new Error("Fee confirmation is unavailable");
 });
@@ -39,8 +39,8 @@ export function StandardFeeConfirmationProvider({ children }: { children: React.
         </DialogHeader>
         <dl className="grid grid-cols-2 gap-3 text-sm">
           <dt>Amount</dt><dd className="text-right tabular-nums">{usdc(details.amountAtomic)} USDC</dd>
-          <dt>Fee</dt><dd className="text-right tabular-nums">{usdc(details.feeAtomic)} USDC</dd>
-          <dt>Amount received</dt><dd className="text-right tabular-nums">{usdc((BigInt(details.amountAtomic) - BigInt(details.feeAtomic)).toString())} USDC</dd>
+          <dt>Total fees</dt><dd className="text-right tabular-nums">{usdc((BigInt(details.feeAtomic) + BigInt(details.forwardingFeeAtomic ?? "0")).toString())} USDC</dd>
+          <dt>Amount received</dt><dd className="text-right tabular-nums">{usdc((BigInt(details.amountAtomic) - BigInt(details.feeAtomic) - BigInt(details.forwardingFeeAtomic ?? "0")).toString())} USDC</dd>
         </dl>
         <DialogFooter>
           <Button variant="outline" onClick={() => settle(false)}>Cancel</Button>

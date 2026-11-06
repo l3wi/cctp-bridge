@@ -124,6 +124,7 @@ export const useCrossEcosystemBridge = () => {
         },
         destination: {
           address: recipientAddress ?? "",
+          useForwarder: params.automaticClaim === true,
           chain: toChainDefinition(destinationChainDef),
         },
         steps,
@@ -164,6 +165,8 @@ export const useCrossEcosystemBridge = () => {
             amount: params.amount,
             recipientAddress: recipientAddress!,
             transferSpeed: transferType,
+            automaticClaim: params.automaticClaim,
+            forwardingMaxFee: params.forwardingMaxFee,
             appFeeAmount: params.appFeeAmount,
             appFeeBps: params.appFeeBps,
             appFeeRecipient: params.appFeeRecipient,
@@ -224,6 +227,8 @@ export const useCrossEcosystemBridge = () => {
         addTransaction({
           hash: burnHash,
           status: "pending",
+          automaticClaim: params.automaticClaim === true,
+          forwardingMaxFee: params.forwardingMaxFee,
           version: "v3",
           transferType,
           estimatedTime: resolveEstimatedTimeLabel({

@@ -38,6 +38,9 @@ export interface StepListProps {
 }
 
 export interface ClaimSectionProps {
+  automaticClaim?: boolean;
+  forwardingDelayed?: boolean;
+  onCheckForwarding?: () => void;
   showClaimButton: boolean;
   amount: string;
   destinationLabel: string;

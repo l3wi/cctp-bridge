@@ -3,6 +3,7 @@ import type { AttestationData } from "@/lib/iris";
 import {
   isTransactionRecoveryPendingError,
   recoverTransactionFromBurnHash,
+  hasForwardingHook,
   recoverTransactionFromNonce,
   TransactionRecoveryPendingError,
 } from "@/lib/transactionRecovery";
@@ -269,5 +270,17 @@ describe("transactionRecovery", () => {
     expect(result.transaction.targetChain).toBe("Solana_Devnet");
     expect(result.transaction.targetAddress).toBeUndefined();
     expect(result.transaction.bridgeResult?.destination.address).toBe("");
+  });
+});
+
+
+describe("forwarding recovery", () => {
+  it("uses the exact v2 hook at the BurnMessage boundary", () => {
+    const hook = "636374702d666f7277617264".padEnd(48, "0") + "0000000000000000";
+    const message = `0x00000001${"0".repeat(744)}${hook}` as `0x${string}`;
+    expect(hasForwardingHook(message)).toBe(true);
+    expect(hasForwardingHook(`0x00000001${"0".repeat(744)}`)).toBe(false);
+    expect(hasForwardingHook(`0x00000000${"0".repeat(744)}${hook}`)).toBe(false);
+    expect(hasForwardingHook(`0x00000001${"0".repeat(744)}${hook.slice(0, -2)}`)).toBe(false);
   });
 });

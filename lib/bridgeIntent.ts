@@ -5,6 +5,8 @@ import { getSourceDomainForChain, parseRouteChainId } from "@/lib/bridgeRoute";
 import { validateAddressForChain } from "@/lib/validation";
 
 export interface BridgeIntent {
+  automaticClaim?: boolean;
+  forwardingMaxFee?: string;
   sourceChainId: ChainId;
   targetChainId: ChainId;
   amount: string;
@@ -23,7 +25,8 @@ export type BridgeIntentParseReason =
   | "invalid_amount"
   | "missing_target_address"
   | "invalid_target_address"
-  | "invalid_transfer_type";
+  | "invalid_transfer_type"
+  | "invalid_forwarding";
 
 export type BridgeIntentParseResult =
   | { ok: true; intent: BridgeIntent }
@@ -59,6 +62,10 @@ export const serializeBridgeIntent = (intent: BridgeIntent): URLSearchParams => 
   params.set(QUERY_KEYS.amount, intent.amount);
   params.set(QUERY_KEYS.targetAddress, intent.targetAddress);
   params.set(QUERY_KEYS.transferType, intent.transferType);
+  if (intent.automaticClaim) {
+    params.set("automaticClaim", "true");
+    if (intent.forwardingMaxFee) params.set("forwardingMaxFee", intent.forwardingMaxFee);
+  }
   return params;
 };
 
@@ -186,6 +193,13 @@ export const parseBridgeIntentResult = (
     return { ok: false, reason: "invalid_transfer_type" };
   }
 
+  const automaticClaimRaw = params.get("automaticClaim");
+  const forwardingMaxFee = params.get("forwardingMaxFee");
+  if ((automaticClaimRaw != null && automaticClaimRaw !== "true" && automaticClaimRaw !== "false") ||
+      (automaticClaimRaw === "true" && (!forwardingMaxFee || !/^[1-9]\d{0,24}$/.test(forwardingMaxFee)))) {
+    return { ok: false, reason: "invalid_forwarding" };
+  }
+
   return {
     ok: true,
     intent: {
@@ -194,6 +208,7 @@ export const parseBridgeIntentResult = (
       amount,
       targetAddress,
       transferType,
+      ...(params.get("automaticClaim") === "true" ? { automaticClaim: true, forwardingMaxFee: params.get("forwardingMaxFee") ?? undefined } : {}),
     },
   };
 };

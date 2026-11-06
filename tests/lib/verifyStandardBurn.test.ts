@@ -1,7 +1,8 @@
 // @vitest-environment node
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { encodeFunctionData, encodeEventTopics, encodeAbiParameters, erc20Abi, TransactionReceiptNotFoundError } from "viem";
-import { BRIDGE_WITH_PREAPPROVAL_ABI } from "@/lib/cctp/evm/burn";
+import { BRIDGE_WITH_PREAPPROVAL_ABI, BRIDGE_WITH_HOOK_ABI, FORWARDING_HOOK_DATA } from "@/lib/cctp/evm/burn";
+import { getForwardingHookData } from "@/lib/cctp/forwarding";
 import { verifyStandardBurn } from "@/lib/db/verifyStandardBurn";
 import { standardFeeReservations } from "@/lib/db/schema";
 import { Keypair, PublicKey } from "@solana/web3.js";
@@ -56,6 +57,21 @@ describe("Standard fee Solana receipt verification", () => {
     solRpc.getParsedTransaction.mockResolvedValue(transaction());
     expect(await verifyStandardBurn(reservation)).toBe("confirmed");
   });
+  it("verifies Solana forwarding Standard instructions with the same app fee", async () => {
+    const tx = transaction();
+    const ix = tx.transaction.message.instructions[0];
+    const base = Buffer.from(utils.bytes.bs58.decode(ix.data!));
+    createHash("sha256").update("global:deposit_for_burn_with_hook").digest().copy(base, 0, 0, 8);
+    base.writeUInt32LE(26, 16);
+    const hook = Buffer.from(FORWARDING_HOOK_DATA.slice(2), "hex");
+    const length = Buffer.alloc(4); length.writeUInt32LE(hook.length);
+    ix.data = utils.bytes.bs58.encode(Buffer.concat([base, length, hook]));
+    solRpc.getParsedTransaction.mockResolvedValue(tx);
+    expect(await verifyStandardBurn(reservation)).toBe("confirmed");
+    base[52] = 1; // A restricted destination caller prevents Circle forwarding.
+    ix.data = utils.bytes.bs58.encode(Buffer.concat([base, length, hook]));
+    await expect(verifyStandardBurn(reservation)).rejects.toThrow("instruction mismatch");
+  });
   it("does not credit Fast burns or an incomplete fee", async () => {
     solRpc.getParsedTransaction.mockResolvedValue(transaction(1000));
     await expect(verifyStandardBurn(reservation)).rejects.toThrow("instruction mismatch");
@@ -89,6 +105,38 @@ describe("Standard fee EVM receipt verification", () => {
     }) });
   });
 
+  it("verifies forwarded Standard app fees and rejects an altered hook", async () => {
+    const transaction = await rpc.getTransaction();
+    const params = {
+      amount: 999_900_000_000n, maxFee: 60_000n, fee: 100_000_000n,
+      mintRecipient: `0x${"0".repeat(64)}` as `0x${string}`, destinationCaller: `0x${"0".repeat(64)}` as `0x${string}`,
+      burnToken: token as `0x${string}`, feeRecipient: recipient as `0x${string}`, destinationDomain: 26, minFinalityThreshold: 2000,
+    };
+    const input = (hookData: `0x${string}`) => encodeFunctionData({ abi: BRIDGE_WITH_HOOK_ABI, functionName: "bridgeWithPreapprovalAndHook", args: [params, hookData] });
+    rpc.getTransaction.mockResolvedValue({ ...transaction, input: input(FORWARDING_HOOK_DATA) });
+    expect(await verifyStandardBurn(r)).toBe("confirmed");
+    rpc.getTransaction.mockResolvedValue({ ...transaction, input: input("0x1234") });
+    await expect(verifyStandardBurn(r)).rejects.toThrow("Forwarding hook mismatch");
+    rpc.getTransaction.mockResolvedValue({ ...transaction, input: input(FORWARDING_HOOK_DATA) });
+    rpc.getTransactionReceipt.mockResolvedValue({ status: "success", blockNumber: 10n, logs: [log(owner, bridge, 1_000_000_000_000n)] });
+    await expect(verifyStandardBurn(r)).rejects.toThrow("Fee receipt mismatch");
+  });
+  it("verifies Solana ATA-creation hook ownership against the EVM burn recipient", async () => {
+    const transaction = await rpc.getTransaction();
+    const wallet = Keypair.generate().publicKey;
+    const mint = new PublicKey("EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v");
+    const ata = getAssociatedTokenAddressSync(mint, wallet);
+    const hookData = getForwardingHookData("Solana", wallet.toBase58());
+    const input = (mintRecipient: `0x${string}`) => encodeFunctionData({ abi: BRIDGE_WITH_HOOK_ABI, functionName: "bridgeWithPreapprovalAndHook", args: [{
+      amount: 999_900_000_000n, maxFee: 60_000n, fee: 100_000_000n,
+      mintRecipient, destinationCaller: `0x${"0".repeat(64)}`,
+      burnToken: token, feeRecipient: recipient, destinationDomain: 5, minFinalityThreshold: 2000,
+    }, hookData] });
+    rpc.getTransaction.mockResolvedValue({ ...transaction, input: input(`0x${ata.toBuffer().toString("hex")}`) });
+    expect(await verifyStandardBurn(r)).toBe("confirmed");
+    rpc.getTransaction.mockResolvedValue({ ...transaction, input: input(`0x${"0".repeat(64)}`) });
+    await expect(verifyStandardBurn(r)).rejects.toThrow("Forwarding hook mismatch");
+  });
   it("credits the full 100 USDC user fee when Circle sends 90 USDC to the recipient", async () => {
     expect(await verifyStandardBurn(r)).toBe("confirmed");
   });

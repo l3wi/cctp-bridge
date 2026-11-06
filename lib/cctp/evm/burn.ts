@@ -22,6 +22,7 @@ import {
   ZERO_BYTES32,
   IRIS_API_ENDPOINTS,
 } from "../shared";
+import { getForwardingQuote, getForwardingHookData } from "../forwarding";
 import { getFastTransferFeeQuote } from "../fastTransferFee";
 
 // =============================================================================
@@ -97,6 +98,17 @@ export const BRIDGE_WITH_PREAPPROVAL_ABI = [
     stateMutability: "nonpayable",
   },
 ] as const;
+
+/** Circle's single-frame forwarding request; destination caller stays unrestricted. */
+export const FORWARDING_HOOK_DATA = "0x636374702d666f72776172640000000000000000000000000000000000000000" as const;
+export const TOKEN_MESSENGER_WITH_HOOK_ABI = [{
+  ...TOKEN_MESSENGER_ABI[0], name: "depositForBurnWithHook",
+  inputs: [...TOKEN_MESSENGER_ABI[0].inputs, { name: "hookData", type: "bytes" }],
+}] as const;
+export const BRIDGE_WITH_HOOK_ABI = [{
+  ...BRIDGE_WITH_PREAPPROVAL_ABI[0], name: "bridgeWithPreapprovalAndHook",
+  inputs: [...BRIDGE_WITH_PREAPPROVAL_ABI[0].inputs, { name: "hookData", type: "bytes" }],
+}] as const;
 
 // =============================================================================
 // Contract Address Resolution
@@ -205,21 +217,14 @@ export function buildApprovalData(
  */
 export function buildDepositForBurnData(
   tokenMessengerAddress: EvmAddress,
-  params: DepositForBurnParams
+  params: DepositForBurnParams & { hookData?: `0x${string}` }
 ): { to: EvmAddress; data: `0x${string}` } {
-  const data = encodeFunctionData({
-    abi: TOKEN_MESSENGER_ABI,
-    functionName: "depositForBurn",
-    args: [
-      params.amount,
-      params.destinationDomain,
-      params.mintRecipient,
-      params.burnToken,
-      params.destinationCaller ?? ZERO_BYTES32,
-      params.maxFee ?? 0n,
-      params.minFinalityThreshold ?? FINALITY_THRESHOLDS.evm.fast,
-    ],
-  });
+  const args = [params.amount, params.destinationDomain, params.mintRecipient,
+    params.burnToken, params.destinationCaller ?? ZERO_BYTES32, params.maxFee ?? 0n,
+    params.minFinalityThreshold ?? FINALITY_THRESHOLDS.evm.fast] as const;
+  const data = params.hookData
+    ? encodeFunctionData({ abi: TOKEN_MESSENGER_WITH_HOOK_ABI, functionName: "depositForBurnWithHook", args: [...args, params.hookData] })
+    : encodeFunctionData({ abi: TOKEN_MESSENGER_ABI, functionName: "depositForBurn", args });
 
   return { to: tokenMessengerAddress, data };
 }
@@ -229,25 +234,18 @@ export function buildDepositForBurnData(
  */
 export function buildBridgeWithPreapprovalData(
   bridgeContractAddress: EvmAddress,
-  params: BridgeWithPreapprovalParams
+  params: BridgeWithPreapprovalParams & { hookData?: `0x${string}` }
 ): { to: EvmAddress; data: `0x${string}` } {
-  const data = encodeFunctionData({
-    abi: BRIDGE_WITH_PREAPPROVAL_ABI,
-    functionName: "bridgeWithPreapproval",
-    args: [
-      {
-        amount: params.amount,
-        maxFee: params.maxFee ?? 0n,
-        fee: params.fee,
-        mintRecipient: params.mintRecipient,
-        destinationCaller: params.destinationCaller ?? ZERO_BYTES32,
-        burnToken: params.burnToken,
-        feeRecipient: params.feeRecipient,
-        destinationDomain: params.destinationDomain,
-        minFinalityThreshold: params.minFinalityThreshold ?? FINALITY_THRESHOLDS.evm.fast,
-      },
-    ],
-  });
+  const bridgeParams = {
+    amount: params.amount, maxFee: params.maxFee ?? 0n, fee: params.fee,
+    mintRecipient: params.mintRecipient, destinationCaller: params.destinationCaller ?? ZERO_BYTES32,
+    burnToken: params.burnToken, feeRecipient: params.feeRecipient,
+    destinationDomain: params.destinationDomain,
+    minFinalityThreshold: params.minFinalityThreshold ?? FINALITY_THRESHOLDS.evm.fast,
+  };
+  const data = params.hookData
+    ? encodeFunctionData({ abi: BRIDGE_WITH_HOOK_ABI, functionName: "bridgeWithPreapprovalAndHook", args: [bridgeParams, params.hookData] })
+    : encodeFunctionData({ abi: BRIDGE_WITH_PREAPPROVAL_ABI, functionName: "bridgeWithPreapproval", args: [bridgeParams] });
 
   return { to: bridgeContractAddress, data };
 }
@@ -353,6 +351,8 @@ export async function calculateMaxFee(
 // =============================================================================
 
 export interface EvmBurnConfig {
+  automaticClaim?: boolean;
+  forwardingMaxFee?: string;
   sourceChainId: number;
   destinationChainId: ChainId;
   amount: bigint;
@@ -382,6 +382,7 @@ export async function prepareEvmBurn(config: EvmBurnConfig): Promise<{
   destinationDomain: number;
   mintRecipient: `0x${string}`;
   maxFee: bigint;
+  hookData?: `0x${string}`;
   minFinalityThreshold: number;
 }> {
   if (config.amount <= 0n) {
@@ -430,19 +431,27 @@ export async function prepareEvmBurn(config: EvmBurnConfig): Promise<{
     throw new Error("Transfer amount too small for app fee");
   }
 
-  // Calculate max fee (may throw on network error)
   let maxFee = 0n;
-  try {
-    maxFee = await calculateMaxFee(
-      sourceDomain,
-      destinationDomain,
-      bridgeAmount,
-      config.transferSpeed,
-      isTestnet
-    );
-  } catch (error) {
-    // Log but don't fail - fall back to standard (0 fee)
-    console.warn("Failed to calculate max fee, falling back to standard:", error);
+  if (config.automaticClaim) {
+    if (!config.forwardingMaxFee || !/^\d+$/.test(config.forwardingMaxFee)) {
+      throw new Error("Automatic claim requires a valid forwarding quote.");
+    }
+    const quote = await getForwardingQuote({
+      sourceChainId: config.sourceChainId, destinationChainId: config.destinationChainId,
+      amount: bridgeAmount, speed: config.transferSpeed, isTestnet, recipientAddress: config.recipientAddress,
+    });
+    const authorizedCap = BigInt(config.forwardingMaxFee);
+    if (authorizedCap <= 0n || quote.maxFee > authorizedCap) {
+      throw new Error("Automatic claim fees changed. Please refresh the quote and try again.");
+    }
+    // The authorization is a ceiling, never a request to spend the excess as priority gas.
+    maxFee = quote.maxFee;
+  } else {
+    try {
+      maxFee = await calculateMaxFee(sourceDomain, destinationDomain, bridgeAmount, config.transferSpeed, isTestnet);
+    } catch (error) {
+      console.warn("Failed to calculate max fee, falling back to standard:", error);
+    }
   }
 
   // Get finality threshold
@@ -474,6 +483,7 @@ export async function prepareEvmBurn(config: EvmBurnConfig): Promise<{
     destinationDomain,
     mintRecipient,
     maxFee,
+    hookData: config.automaticClaim ? getForwardingHookData(config.destinationChainId, config.recipientAddress) : undefined,
     minFinalityThreshold,
   };
 }
