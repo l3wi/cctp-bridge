@@ -70,7 +70,9 @@ const DEFAULT_SOLANA_RPCS: SolanaRpcEntry[] = [
     chain: "Solana",
     urls: [
       "https://solana-rpc.publicnode.com",
-      "https://api.mainnet-beta.solana.com",
+      "https://public.rpc.solanavibestation.com",
+      "https://solana-mainnet.gateway.tatum.io",
+      "https://solana.web3cdn.rest",
     ],
   },
   {

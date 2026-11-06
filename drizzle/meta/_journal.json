@@ -29,6 +29,13 @@
       "when": 1789989109513,
       "tag": "0003_equal_doctor_spectrum",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1793105435627,
+      "tag": "0004_standard_fee_reconciliation",
+      "breakpoints": true
     }
   ]
 }

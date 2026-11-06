@@ -1,7 +1,8 @@
-import { Connection, PublicKey } from "@solana/web3.js";
+import { PublicKey } from "@solana/web3.js";
 import { getAccount, getAssociatedTokenAddress } from "@solana/spl-token";
-import { getSolanaRpcEndpoint, BRIDGEKIT_ENV } from "./bridgeConfig";
+import { BRIDGEKIT_ENV } from "./bridgeConfig";
 import type { SolanaChainId } from "./types";
+import { createSolanaConnection } from "@/lib/rpc/clients";
 export { createSolanaConnection } from "@/lib/rpc/clients";
 
 // USDC token mint addresses on Solana
@@ -20,8 +21,7 @@ export const getSolanaUsdcBalance = async (
   publicKey: PublicKey,
   chainId: SolanaChainId = BRIDGEKIT_ENV === "mainnet" ? "Solana" : "Solana_Devnet"
 ): Promise<{ balance: bigint; formatted: string }> => {
-  const endpoint = getSolanaRpcEndpoint(chainId);
-  const connection = new Connection(endpoint, "confirmed");
+  const connection = createSolanaConnection(chainId);
   const usdcMint = new PublicKey(USDC_MINT[chainId]);
 
   try {
@@ -46,8 +46,7 @@ export const getSolanaNativeBalance = async (
   publicKey: PublicKey,
   chainId: SolanaChainId = BRIDGEKIT_ENV === "mainnet" ? "Solana" : "Solana_Devnet"
 ): Promise<{ balance: bigint; formatted: string }> => {
-  const endpoint = getSolanaRpcEndpoint(chainId);
-  const connection = new Connection(endpoint, "confirmed");
+  const connection = createSolanaConnection(chainId);
 
   try {
     const lamports = await connection.getBalance(publicKey);

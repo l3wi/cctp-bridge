@@ -5,9 +5,10 @@ import { LoadingButton } from "@/components/loading/LoadingStates";
 interface IntentStatusCardProps {
   state: "submitting-burn" | "preparing" | "not-started" | "waiting";
   onBack: () => void;
+  failureReason?: string;
 }
 
-export function IntentStatusCard({ state, onBack }: IntentStatusCardProps) {
+export function IntentStatusCard({ state, onBack, failureReason }: IntentStatusCardProps) {
   const didNotStart = state === "not-started";
   const title =
     state === "submitting-burn"
@@ -17,11 +18,12 @@ export function IntentStatusCard({ state, onBack }: IntentStatusCardProps) {
       : state === "preparing"
       ? "Preparing Bridge Transaction"
       : "Waiting for Bridge Request";
+  const feesChanged = !!failureReason && /fee.*(chang|increas|exceed)|refresh.*fee/i.test(failureReason);
   const description =
     state === "submitting-burn"
       ? "Approval and burn are in progress. You will be redirected to a shareable bridge URL once the burn hash is available."
       : didNotStart
-      ? "The burn transaction did not start. Check your wallet connection and selected network, then go back to review or cancel this request."
+      ? failureReason ?? "The burn transaction did not start. Check your wallet connection and selected network, then go back to review or cancel this request."
       : state === "preparing"
       ? "Waiting for wallet confirmations before submitting burn transaction."
       : "Bridge request data is being initialized.";
@@ -46,7 +48,7 @@ export function IntentStatusCard({ state, onBack }: IntentStatusCardProps) {
               onClick={onBack}
               isLoading={false}
             >
-              Back
+              {feesChanged ? "Review updated fees" : "Back"}
             </LoadingButton>
             <LoadingButton
               variant="ghost"

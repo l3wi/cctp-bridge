@@ -2,6 +2,10 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { decodeFunctionData } from "viem";
 import {
   BRIDGE_WITH_PREAPPROVAL_ABI,
+  BRIDGE_WITH_HOOK_ABI,
+  TOKEN_MESSENGER_WITH_HOOK_ABI,
+  FORWARDING_HOOK_DATA,
+  buildDepositForBurnData,
   buildBridgeWithPreapprovalData,
   prepareEvmBurn,
 } from "@/lib/cctp/evm/burn";
@@ -130,5 +134,43 @@ describe("EVM burn fee support", () => {
         env: "mainnet",
       })
     ).rejects.toThrow("App fee amount cannot be negative");
+  });
+});
+
+
+describe("Arc automatic claim burns", () => {
+  it("encodes forwarding alongside the app fee without changing either amount", () => {
+    const tx = buildBridgeWithPreapprovalData(VALID_EVM_RECIPIENT, {
+      amount: 999_600n, fee: 400n, maxFee: 60_000n,
+      destinationDomain: 26, mintRecipient: `0x${"0".repeat(64)}`,
+      burnToken: VALID_EVM_RECIPIENT, feeRecipient: VALID_EVM_RECIPIENT,
+      minFinalityThreshold: 2000, hookData: FORWARDING_HOOK_DATA,
+    });
+    const decoded = decodeFunctionData({ abi: BRIDGE_WITH_HOOK_ABI, data: tx.data });
+    expect(decoded.args[0]).toMatchObject({ amount: 999_600n, fee: 400n, maxFee: 60_000n, minFinalityThreshold: 2000 });
+    expect(decoded.args[1]).toBe(FORWARDING_HOOK_DATA);
+  });
+  it("uses the direct hook method for burns without an app fee", () => {
+    const tx = buildDepositForBurnData(VALID_EVM_RECIPIENT, {
+      amount: 1_000_000n, maxFee: 60_000n, destinationDomain: 26,
+      mintRecipient: `0x${"0".repeat(64)}`, burnToken: VALID_EVM_RECIPIENT,
+      hookData: FORWARDING_HOOK_DATA,
+    });
+    const decoded = decodeFunctionData({ abi: TOKEN_MESSENGER_WITH_HOOK_ABI, data: tx.data });
+    expect(decoded.args[7]).toBe(FORWARDING_HOOK_DATA);
+    expect(decoded.args[4]).toBe(`0x${"0".repeat(64)}`);
+  });
+  it("includes a forwarding fee for Standard and fails closed when it exceeds authorization", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, json: async () => [{ finalityThreshold: 2000, minimumFee: 0, forwardFee: { med: 60_000 } }] }));
+    const config = { sourceChainId: 1, destinationChainId: 5042, amount: 1_000_000n, recipientAddress: VALID_EVM_RECIPIENT, transferSpeed: "standard" as const, automaticClaim: true, forwardingMaxFee: "60000", env: "mainnet" as const };
+    const prepared = await prepareEvmBurn(config);
+    expect(prepared.maxFee).toBe(60_000n);
+    expect(prepared.hookData).toBe(FORWARDING_HOOK_DATA);
+    // A shared URL can carry an oversized cap; never turn it into a priority-fee payment.
+    expect((await prepareEvmBurn({ ...config, forwardingMaxFee: "900000000" })).maxFee).toBe(60_000n);
+    await expect(prepareEvmBurn({ ...config, forwardingMaxFee: "59000" })).rejects.toMatchObject({ code: "FORWARDING_FEE_CHANGED" });
+    expect((await prepareEvmBurn({ ...config, forwardingMaxFee: "72000" })).maxFee).toBe(60_000n);
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("offline")));
+    await expect(prepareEvmBurn(config)).rejects.toThrow("offline");
   });
 });

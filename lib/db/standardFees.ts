@@ -12,7 +12,11 @@ export async function previewStandardFee(input: Pick<StandardFeeRequest, "addres
   const db = getDatabase();
   const pending = await db.select({ id: reservations.id }).from(reservations).where(and(
     eq(reservations.address, address), inArray(reservations.status, ["broadcasting", "submitted"]), isNotNull(reservations.burnHash),
-  )).limit(20);
+  )).orderBy(reservations.lastCheckedAt, reservations.createdAt, reservations.id).limit(20);
+  if (pending.length) {
+    // Rotate even unavailable receipts out of the next bounded reconciliation batch.
+    await db.update(reservations).set({ lastCheckedAt: Date.now() }).where(inArray(reservations.id, pending.map(r => r.id)));
+  }
   for (const reservation of pending) {
     try { await reconcileStandardFee(reservation.id); } catch { /* Unverified requests cannot block a wallet. */ }
   }

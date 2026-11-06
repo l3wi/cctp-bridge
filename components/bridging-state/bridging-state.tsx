@@ -248,7 +248,11 @@ export function BridgingState({
     isReattesting,
     isAwaitingReattestation,
     reattestTimedOut,
+    forwardingDelayed,
+    checkForwardingStatus,
   } = useMintPolling({
+    automaticClaim: displayResult?.destination?.useForwarder === true,
+    recipientAddress: displayResult?.destination?.address ?? recipientAddress,
     burnTxHash,
     sourceChainId,
     destinationChainId,
@@ -469,6 +473,7 @@ export function BridgingState({
 
   // Show claim button logic
   const showClaimButton = useMemo(() => {
+    if (displayResult?.destination?.useForwarder) return false;
     // Never show claim button if burn failed
     if (hasBurnFailed || burnPollingFailed) return false;
     if (alreadyMinted) return false;
@@ -481,6 +486,7 @@ export function BridgingState({
     }
     return hasFetchAttestation;
   }, [
+    displayResult?.destination?.useForwarder,
     hasBurnFailed,
     burnPollingFailed,
     alreadyMinted,
@@ -531,6 +537,9 @@ export function BridgingState({
 
           <ClaimSection
             showClaimButton={showClaimButton}
+            automaticClaim={displayResult.destination.useForwarder === true && !hasMintCompleted && !alreadyMinted && !hasBurnFailed && !burnPollingFailed && hasBurnCompleted}
+            forwardingDelayed={forwardingDelayed}
+            onCheckForwarding={checkForwardingStatus}
             amount={amount}
             destinationLabel={displayTo.label}
             onDestinationChain={onDestinationChain}

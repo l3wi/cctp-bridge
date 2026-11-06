@@ -26,8 +26,10 @@ describe("cumulative Standard billing", () => {
     db = drizzle({ client, schema });
     await client.execute("CREATE TABLE bridge_burn_submissions (from_address TEXT, source_chain_id TEXT, transfer_type TEXT, amount_atomic INTEGER, burn_hash TEXT, submitted_at INTEGER)");
     verifyBurn.mockReset().mockResolvedValue("confirmed");
-    for (const statement of readFileSync("drizzle/0003_equal_doctor_spectrum.sql", "utf8").split("--> statement-breakpoint")) {
-      await client.execute(statement);
+    for (const migration of ["0003_equal_doctor_spectrum", "0004_standard_fee_reconciliation"]) {
+      for (const statement of readFileSync(`drizzle/${migration}.sql`, "utf8").split("--> statement-breakpoint")) {
+        await client.execute(statement);
+      }
     }
   });
   afterEach(() => { client.close(); rmSync(directory, { recursive: true }); });
@@ -117,6 +119,24 @@ describe("cumulative Standard billing", () => {
     verifyBurn.mockResolvedValue("pending");
     expect(await previewStandardFee(request(1_000_000n))).toEqual({ volumeAtomic: "0", feeAtomic: "0", chargeFee: false });
     expect(await db.query.standardFeeAccounts.findFirst()).toMatchObject({ volumeAtomic: 0, feesPaidAtomic: 0, activeReservationId: null });
+  });
+
+  it("rotates bounded reconciliation past twenty pending or unavailable receipts", async () => {
+    const template = await reserveStandardFee(request(M / 2n));
+    await db.insert(schema.standardFeeReservations).values(Array.from({ length: 21 }, (_, index) => ({
+      ...template, id: `pending-${String(index).padStart(2, "0")}`, token: randomUUID(),
+      status: "submitted" as const, burnHash: `0x${index}`, createdAt: index,
+    })));
+    verifyBurn.mockImplementation(async reservation => {
+      if (reservation.id === "pending-20") return "confirmed";
+      if (Number(reservation.id.slice(-2)) % 2) throw new Error("RPC unavailable");
+      return "pending";
+    });
+    expect(await previewStandardFee(request(M / 2n))).toEqual({ volumeAtomic: "0", feeAtomic: "0", chargeFee: false });
+    expect(verifyBurn).toHaveBeenCalledTimes(20);
+    expect(await previewStandardFee(request(M / 2n))).toEqual({ volumeAtomic: String(M / 2n), feeAtomic: String(F), chargeFee: true });
+    expect(verifyBurn).toHaveBeenCalledTimes(40);
+    expect(await db.query.standardFeeAccounts.findFirst()).toMatchObject({ volumeAtomic: Number(M / 2n), feesPaidAtomic: 0 });
   });
 
   it("releases a reverted burn before quoting the fee still owed", async () => {

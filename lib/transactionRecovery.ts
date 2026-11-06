@@ -1,3 +1,5 @@
+import { createSolanaConnection } from "@/lib/rpc/clients";
+import { PublicKey } from "@solana/web3.js";
 import type { BridgeResult } from "@circle-fin/bridge-kit";
 import {
   BRIDGEKIT_ENV,
@@ -206,6 +208,18 @@ const createPendingRecoveryError = (
   });
 };
 
+/** Recover forwarding intent from the actual CCTP v2 hook, never present-day chain capabilities. */
+export function hasForwardingHook(message?: `0x${string}`): boolean {
+  if (!message || message.slice(2, 10) !== "00000001") return false;
+  // CCTP v2 header = 148 bytes; fixed BurnMessage fields = 228 bytes.
+  const hook = message.slice(2 + 376 * 2).toLowerCase();
+  const magic = "636374702d666f7277617264".padEnd(48, "0");
+  if (!hook.startsWith(magic) || hook.length < 64) return false;
+  const version = hook.slice(48, 56);
+  const length = Number.parseInt(hook.slice(56, 64), 16);
+  return (version === "00000000" || version === "00000001") && Number.isSafeInteger(length) && hook.length >= 64 + length * 2;
+}
+
 const buildRecoveredTransaction = async (
   sourceChainId: ChainId,
   burnTxHash: string,
@@ -247,8 +261,23 @@ const buildRecoveredTransaction = async (
     throw new TransactionRecoveryError("Could not resolve source or destination chain metadata");
   }
 
+  const automaticClaim = hasForwardingHook(attestationData.message);
   const amount = formatAmount(attestationData.amount);
-  const targetAddress = resolveTargetAddress(targetChainId, attestationData.mintRecipient);
+  let targetAddress = resolveTargetAddress(targetChainId, attestationData.mintRecipient);
+  if (automaticClaim && isSolanaChain(targetChainId) && attestationData.message) {
+    const hook = attestationData.message.slice(2 + 376 * 2);
+    if (hook.slice(56, 66).toLowerCase() === "0000002101" && hook.length >= 130) {
+      targetAddress = new PublicKey(Buffer.from(hook.slice(66, 130), "hex")).toBase58();
+    } else if (attestationData.mintRecipient) {
+      try {
+        const raw = attestationData.mintRecipient.replace(/^0x/, "");
+        const ata = new PublicKey(Buffer.from(raw, "hex"));
+        const account = await createSolanaConnection(targetChainId).getParsedAccountInfo(ata);
+        const data = account.value?.data;
+        if (data && "parsed" in data && typeof data.parsed?.info?.owner === "string") targetAddress = data.parsed.info.owner;
+      } catch { /* Keep waiting for recipient account creation rather than invent its owner. */ }
+    }
+  }
 
   let isAlreadyClaimed = false;
   if (attestationData.message) {
@@ -300,6 +329,7 @@ const buildRecoveredTransaction = async (
     },
     destination: {
       address: destinationDisplayAddress,
+      useForwarder: automaticClaim,
       chain: toChainDefinition(destinationChainDef),
     },
     steps,
@@ -319,6 +349,7 @@ const buildRecoveredTransaction = async (
       bridgeState,
       bridgeResult,
       nonce: attestationData.nonce,
+      automaticClaim,
     },
   };
 };

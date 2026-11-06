@@ -82,6 +82,7 @@ export const standardFeeReservations = sqliteTable("standard_fee_reservations", 
   status: text("status", { enum: ["reserved", "broadcasting", "submitted", "confirmed", "cancelled", "failed"] }).notNull(),
   burnHash: text("burn_hash"),
   createdAt: integer("created_at").notNull(),
+  lastCheckedAt: integer("last_checked_at").notNull().default(0),
 }, (table) => [
   uniqueIndex("standard_fee_burn_idx").on(table.sourceChainId, table.burnHash),
   index("standard_fee_account_idx").on(table.address, table.status),

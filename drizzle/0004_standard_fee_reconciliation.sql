@@ -1,0 +1,1 @@
+ALTER TABLE `standard_fee_reservations` ADD `last_checked_at` integer DEFAULT 0 NOT NULL;

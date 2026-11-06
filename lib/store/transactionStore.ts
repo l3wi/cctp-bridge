@@ -125,6 +125,8 @@ const normalizeTransaction = (
     claimHash,
     version: "v3",
     transferType,
+    automaticClaim: (tx as Partial<LocalTransaction>).automaticClaim,
+    forwardingMaxFee: (tx as Partial<LocalTransaction>).forwardingMaxFee,
     fee: (tx as Partial<LocalTransaction>).fee,
     circleFastFee: (tx as Partial<LocalTransaction>).circleFastFee,
     appFastFee: (tx as Partial<LocalTransaction>).appFastFee,

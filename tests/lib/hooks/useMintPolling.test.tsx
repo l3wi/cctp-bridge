@@ -4,6 +4,9 @@ import { act, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useMintPolling } from "@/lib/hooks/useMintPolling";
 
+const verifyForwardedMintMock = vi.hoisted(() => vi.fn());
+vi.mock("@/lib/cctp/forwardedReceipt", () => ({ verifyForwardedMint: verifyForwardedMintMock }));
+
 const updateTransactionMock = vi.hoisted(() => vi.fn());
 const toastMock = vi.hoisted(() => vi.fn());
 const checkMintReadinessMock = vi.hoisted(() => vi.fn());
@@ -32,6 +35,14 @@ vi.mock("@/lib/iris", () => ({
   fetchAttestationUniversal: fetchAttestationUniversalMock,
   requestReattestation: requestReattestationMock,
 }));
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((resolvePromise) => {
+    resolve = resolvePromise;
+  });
+  return { promise, resolve };
+}
 
 describe("useMintPolling", () => {
   beforeEach(() => {
@@ -327,6 +338,191 @@ describe("useMintPolling", () => {
     expect(result.current.expirationBlock).toBe("999999");
   });
 
+  it("does not overlap slow Solana attestation fetches and resumes after settlement", async () => {
+    const pending = deferred<{ status: string; nonce: string }>();
+    fetchAttestationUniversalMock.mockReturnValueOnce(pending.promise);
+
+    const { unmount } = renderHook(() => useMintPolling({
+      burnTxHash: `0x${"9".repeat(64)}`,
+      sourceChainId: 1,
+      destinationChainId: "Solana",
+      burnCompletedAt: new Date(),
+      startedAt: new Date(),
+      isSuccess: false,
+      hasBurnCompleted: true,
+      hasFetchAttestation: false,
+      displaySteps: [{ name: "Burn", state: "success" }],
+      onStepsUpdate: vi.fn(),
+    }));
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(45_000);
+    });
+
+    expect(fetchAttestationUniversalMock).toHaveBeenCalledTimes(1);
+    expect(checkSolanaMintStatusMock).not.toHaveBeenCalled();
+
+    await act(async () => {
+      pending.resolve({ status: "pending", nonce: "42" });
+      await pending.promise;
+    });
+    expect(fetchAttestationUniversalMock).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(15_000);
+    });
+
+    expect(fetchAttestationUniversalMock).toHaveBeenCalledTimes(2);
+    unmount();
+  });
+
+  it("keeps the Solana attestation check in flight until destination readiness settles", async () => {
+    const pending = deferred<{ canMint: boolean; alreadyMinted: boolean; error: string }>();
+    fetchAttestationUniversalMock.mockResolvedValueOnce({
+      status: "complete", nonce: "42", message: "0x1234", attestation: "0xabcd",
+    });
+    checkSolanaMintStatusMock.mockReturnValueOnce(pending.promise);
+
+    const { result, unmount } = renderHook(() => useMintPolling({
+      burnTxHash: `0x${"a".repeat(64)}`,
+      sourceChainId: 1,
+      destinationChainId: "Solana",
+      burnCompletedAt: new Date(),
+      startedAt: new Date(),
+      isSuccess: false,
+      hasBurnCompleted: true,
+      hasFetchAttestation: false,
+      displaySteps: [{ name: "Burn", state: "success" }],
+      onStepsUpdate: vi.fn(),
+    }));
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(45_000);
+    });
+
+    expect(fetchAttestationUniversalMock).toHaveBeenCalledTimes(1);
+    expect(checkSolanaMintStatusMock).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      pending.resolve({ canMint: false, alreadyMinted: false, error: "not ready" });
+      await pending.promise;
+    });
+
+    expect(result.current.attestationReady).toBe(false);
+    expect(result.current.error).toBe("not ready");
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(15_000);
+    });
+
+    expect(fetchAttestationUniversalMock).toHaveBeenCalledTimes(2);
+    expect(checkSolanaMintStatusMock).toHaveBeenCalledTimes(1);
+    unmount();
+  });
+
+  it("ignores a cleaned-up Solana attestation fetch and resumes for the new transaction", async () => {
+    const oldHash = `0x${"b".repeat(64)}`;
+    const newHash = `0x${"c".repeat(64)}`;
+    const onStepsUpdate = vi.fn();
+    const staleAttestation = {
+      status: "complete",
+      nonce: "42",
+      message: "0x1234",
+      attestation: "0xabcd",
+      delayReason: "insufficient_fee",
+    };
+    const pending = deferred<typeof staleAttestation>();
+    fetchAttestationUniversalMock.mockReturnValueOnce(pending.promise).mockResolvedValue({
+      ...staleAttestation, nonce: "43", delayReason: undefined,
+    });
+    checkSolanaMintStatusMock.mockResolvedValue({ canMint: true, alreadyMinted: false });
+
+    const { result, rerender, unmount } = renderHook(({ burnTxHash }) => useMintPolling({
+      burnTxHash,
+      sourceChainId: 1,
+      destinationChainId: "Solana",
+      burnCompletedAt: new Date(),
+      startedAt: new Date(),
+      isSuccess: false,
+      hasBurnCompleted: true,
+      hasFetchAttestation: false,
+      displaySteps: [
+        { name: "Burn", state: "success", txHash: burnTxHash },
+        { name: "Fetch Attestation", state: "pending" },
+      ],
+      onStepsUpdate,
+    }), { initialProps: { burnTxHash: oldHash } });
+
+    rerender({ burnTxHash: newHash });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(30_000);
+    });
+    expect(fetchAttestationUniversalMock).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      pending.resolve(staleAttestation);
+      await pending.promise;
+    });
+
+    expect(checkSolanaMintStatusMock).not.toHaveBeenCalled();
+    expect(updateTransactionMock).not.toHaveBeenCalled();
+    expect(onStepsUpdate).not.toHaveBeenCalled();
+    expect(result.current.attestationReady).toBe(false);
+    expect(result.current.delayReason).toBeUndefined();
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(15_000);
+    });
+
+    expect(fetchAttestationUniversalMock).toHaveBeenCalledTimes(2);
+    expect(fetchAttestationUniversalMock).toHaveBeenLastCalledWith(1, newHash);
+    expect(result.current.canMint).toBe(true);
+    expect(updateTransactionMock).toHaveBeenCalledTimes(1);
+    expect(updateTransactionMock).toHaveBeenCalledWith(newHash, expect.objectContaining({ nonce: "43" }));
+    unmount();
+  });
+
+  it("ignores destination readiness results after the Solana attestation effect is cleaned up", async () => {
+    const pending = deferred<{ canMint: boolean; alreadyMinted: boolean }>();
+    const onStepsUpdate = vi.fn();
+    fetchAttestationUniversalMock.mockResolvedValue({
+      status: "complete", nonce: "42", message: "0x1234", attestation: "0xabcd",
+    });
+    checkSolanaMintStatusMock.mockReturnValueOnce(pending.promise);
+
+    const { result, rerender, unmount } = renderHook(({ isSuccess }) => useMintPolling({
+      burnTxHash: `0x${"d".repeat(64)}`,
+      sourceChainId: 1,
+      destinationChainId: "Solana",
+      burnCompletedAt: new Date(),
+      startedAt: new Date(),
+      isSuccess,
+      hasBurnCompleted: true,
+      hasFetchAttestation: false,
+      displaySteps: [{ name: "Burn", state: "success" }],
+      onStepsUpdate,
+    }), { initialProps: { isSuccess: false } });
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(checkSolanaMintStatusMock).toHaveBeenCalledTimes(1);
+
+    rerender({ isSuccess: true });
+    await act(async () => {
+      pending.resolve({ canMint: true, alreadyMinted: false });
+      await pending.promise;
+      await vi.advanceTimersByTimeAsync(30_000);
+    });
+
+    expect(updateTransactionMock).not.toHaveBeenCalled();
+    expect(onStepsUpdate).not.toHaveBeenCalled();
+    expect(result.current.attestationReady).toBe(false);
+    expect(result.current.canMint).toBe(false);
+    expect(fetchAttestationUniversalMock).toHaveBeenCalledTimes(1);
+    unmount();
+  });
+
   it("continues polling an old Solana transfer until its attestation becomes ready", async () => {
     const hash = `0x${"8".repeat(64)}`;
     const onStepsUpdate = vi.fn();
@@ -443,4 +639,20 @@ describe("useMintPolling", () => {
     );
     expect(downgradeCalls).toHaveLength(1);
   });
+  it("keeps automatic claim polling after attestation and requires a verified destination receipt", async () => {
+    verifyForwardedMintMock.mockResolvedValue(false);
+    const hash = `0x${"a".repeat(64)}`;
+    fetchAttestationUniversalMock.mockResolvedValue({ status: "complete", nonce: "42", message: "0x1234", forwardTxHash: hash });
+    const onStepsUpdate = vi.fn();
+    renderHook(() => useMintPolling({ automaticClaim: true, recipientAddress: "0x1111111111111111111111111111111111111111", burnTxHash: `0x${"b".repeat(64)}`, sourceChainId: 1, destinationChainId: 5042, burnCompletedAt: new Date(), startedAt: new Date(), isSuccess: false, hasBurnCompleted: true, hasFetchAttestation: true, displaySteps: [{ name: "Burn", state: "success" }, { name: "Mint", state: "pending" }], onStepsUpdate }));
+    await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+    expect(checkMintReadinessMock).not.toHaveBeenCalled();
+    expect(verifyForwardedMintMock).toHaveBeenCalled();
+    expect(updateTransactionMock).not.toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ status: "claimed" }));
+    verifyForwardedMintMock.mockResolvedValue(true);
+    await act(async () => { await vi.advanceTimersByTimeAsync(5_000); });
+    expect(updateTransactionMock).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ status: "claimed", claimHash: hash }));
+    expect(onStepsUpdate).toHaveBeenCalledWith(expect.arrayContaining([expect.objectContaining({ name: "Mint", state: "success", txHash: hash })]));
+  });
+
 });

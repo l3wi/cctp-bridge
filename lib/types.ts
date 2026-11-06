@@ -61,6 +61,8 @@ export interface LocalTransaction {
   claimHash?: UniversalTxHash;
   version: "v3"; // Schema version
   transferType?: "standard" | "fast"; // Transfer speed
+  automaticClaim?: boolean;
+  forwardingMaxFee?: string;
   fee?: string; // Fast transfer fee
   circleFastFee?: string; // Circle fast-liquidity fee cap
   appFastFee?: string; // App-level fast tx fee
@@ -131,6 +133,8 @@ export interface BridgeParams {
   sourceTokenAddress?: EvmAddress; // EVM only - USDC contract address
   version?: "v1" | "v2";
   transferType?: "standard" | "fast";
+  automaticClaim?: boolean;
+  forwardingMaxFee?: string;
   /** Optional app fee collected atomically with the burn. */
   appFeeAmount?: bigint;
   appFeeBps?: number;

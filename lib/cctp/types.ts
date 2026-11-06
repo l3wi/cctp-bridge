@@ -109,6 +109,8 @@ export type TransferSpeed = "fast" | "standard";
 
 /** Parameters for initiating a burn (source chain operation) */
 export interface BurnParams {
+  automaticClaim?: boolean;
+  forwardingMaxFee?: string;
   sourceChainId: ChainId;
   destinationChainId: ChainId;
   amount: bigint;
@@ -122,6 +124,9 @@ export interface BurnParams {
 
 /** Result from burn operation */
 export interface BurnResult {
+  errorCode?: string;
+  automaticClaim?: boolean;
+  forwardingMaxFee?: string;
   success: boolean;
   burnTxHash?: UniversalTxHash;
   /** EVM only - approval transaction hash */
@@ -241,6 +246,8 @@ export interface NonceCheckResult {
 
 /** Persisted transaction record */
 export interface LocalTransaction {
+  automaticClaim?: boolean;
+  forwardingMaxFee?: string;
   date: Date;
   /** Source chain (EVM chainId or Solana identifier) */
   originChain: ChainId;
@@ -358,11 +365,14 @@ export interface EstimateFee {
   /** Fee amount in USDC (e.g., "0.000050") */
   amount: string;
   /** provider = Circle destination-deducted fee, kit = source-side app fee */
-  type: "provider" | "kit";
+  type: "provider" | "kit" | "forwarder";
 }
 
 /** Result from bridge fee estimation */
 export interface BridgeEstimate {
+  forwardingMaxFee?: string;
+  forwardingQuotedAt?: number;
+  forwardingRecipient?: string;
   /** Protocol fees (only for fast transfers) */
   fees: EstimateFee[];
   /** Gas fees - empty for CCTP (no gas to user) */
@@ -383,6 +393,8 @@ export interface BridgeEstimate {
 
 /** Parameters for estimate function */
 export interface EstimateParams {
+  automaticClaim?: boolean;
+  recipientAddress?: string;
   sourceChainId: ChainId;
   destinationChainId: ChainId;
   /** Amount in USDC (e.g., "10.50") */

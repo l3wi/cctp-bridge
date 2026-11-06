@@ -2,7 +2,11 @@ import { useCallback } from "react";
 import { useWallet, useConnection } from "@solana/wallet-adapter-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { PublicKey } from "@solana/web3.js";
-import { getAccount, getAssociatedTokenAddress } from "@solana/spl-token";
+import {
+  getAccount,
+  getAssociatedTokenAddress,
+  TokenAccountNotFoundError,
+} from "@solana/spl-token";
 import { BRIDGEKIT_ENV } from "@/lib/bridgeConfig";
 import type { SolanaChainId } from "@/lib/types";
 
@@ -76,13 +80,15 @@ export const useSolanaBalance = (
         const balance = account.amount;
         const formatted = (Number(balance) / 1_000_000).toFixed(6);
         return { balance, formatted };
-      } catch {
-        // Account doesn't exist or has no USDC
+      } catch (error) {
+        if (!(error instanceof TokenAccountNotFoundError)) throw error;
+        // A missing associated token account legitimately has no USDC.
         return { balance: BigInt(0), formatted: "0.000000" };
       }
     },
     enabled: enabled && connected && !!publicKey,
     refetchInterval,
+    retry: false,
     staleTime: 15000,
     gcTime: 60000,
   });
@@ -93,21 +99,18 @@ export const useSolanaBalance = (
     isLoading: solLoading,
     error: solError,
   } = useQuery({
-    queryKey: ["solana-sol-balance", publicKey?.toBase58()],
+    queryKey: ["solana-sol-balance", publicKey?.toBase58(), solanaChainId],
     queryFn: async () => {
       if (!publicKey) return null;
 
-      try {
-        const lamports = await connection.getBalance(publicKey);
-        const balance = BigInt(lamports);
-        const formatted = (lamports / 1_000_000_000).toFixed(9);
-        return { balance, formatted };
-      } catch {
-        return { balance: BigInt(0), formatted: "0.000000000" };
-      }
+      const lamports = await connection.getBalance(publicKey);
+      const balance = BigInt(lamports);
+      const formatted = (lamports / 1_000_000_000).toFixed(9);
+      return { balance, formatted };
     },
     enabled: enabled && connected && !!publicKey,
     refetchInterval,
+    retry: false,
     staleTime: 15000,
     gcTime: 60000,
   });

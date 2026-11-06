@@ -154,6 +154,10 @@ export function getEstimateLabels(params: {
   transferSpeedLabel: string;
 }): EstimateLabels {
   const feeTotal = getTotalBridgeFee(params.estimate);
+  const forwardingCap = params.estimate?.forwardingMaxFee;
+  const boundedFeeTotal = forwardingCap !== undefined
+    ? Number(forwardingCap) / 1e6 + getAppFastFee(params.estimate)
+    : feeTotal;
   const blockedEstimateLabel = !params.amountIsValid
     ? "Complete the form"
     : !params.chainSelectionValid
@@ -167,7 +171,7 @@ export function getEstimateLabels(params: {
     : params.isEstimating
     ? "Fetching..."
     : params.estimate
-    ? `${feeTotal.toFixed(6)} USDC`
+    ? `${forwardingCap !== undefined ? "Up to " : ""}${boundedFeeTotal.toFixed(6)} USDC`
     : "—";
 
   const receiveLabel = !params.hasAmountInput
@@ -175,7 +179,7 @@ export function getEstimateLabels(params: {
     : blockedEstimateLabel
     ? blockedEstimateLabel
     : params.estimate
-    ? getYouWillReceive({ amount: params.amount, feeTotal })
+    ? `${forwardingCap !== undefined ? "At least " : ""}${getYouWillReceive({ amount: params.amount, feeTotal: boundedFeeTotal })}`
     : "—";
 
   const confirmations = params.activeSourceChainId

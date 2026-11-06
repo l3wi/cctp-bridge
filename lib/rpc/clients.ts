@@ -1,15 +1,16 @@
 import { Connection } from "@solana/web3.js";
-import { createPublicClient, type Chain, type EIP1193Provider } from "viem";
+import { createPublicClient, fallback, http, type Chain, type EIP1193Provider } from "viem";
 import type { WalletClient } from "viem";
 import type { BridgeEnvironment, EvmChainMetadata } from "@/lib/metadata/types";
 import { BRIDGEKIT_ENV, resolveBridgeChain } from "@/lib/metadata/index";
 import { getWalletFirstEvmTransport } from "@/lib/rpc/router";
 import type { SolanaChainId } from "@/lib/types";
 import { getConfiguredSolanaRpcUrls } from "@/lib/rpc/config";
+import { solanaRpcScheduler } from "@/lib/rpc/solanaScheduler";
 
 const DEFAULT_ENV: BridgeEnvironment = BRIDGEKIT_ENV;
 const solanaConnectionCache = new Map<string, Connection>();
-const SOLANA_RPC_MAX_RETRIES = 3;
+const SOLANA_RPC_TIMEOUT_MS = 10_000;
 
 const isReadableStreamBody = (value: unknown): value is ReadableStream =>
   typeof ReadableStream !== "undefined" && value instanceof ReadableStream;
@@ -54,7 +55,7 @@ const shouldRetrySolanaRequest = (
   response: Response,
   bodyText: string | null
 ): boolean => {
-  if (response.status === 403 || response.status === 429 || response.status >= 500) {
+  if (response.status === 403 || response.status === 408 || response.status === 429 || response.status >= 500) {
     return true;
   }
 
@@ -65,12 +66,12 @@ const shouldRetrySolanaRequest = (
   if (!bodyText) return false;
 
   const { code, message } = parseSolanaRpcError(bodyText);
-  if (code === 403) {
+  if (code === 403 || code === 408 || code === 429 || code === -32005 || (code !== undefined && code >= 500 && code < 600)) {
     return true;
   }
 
   return typeof message === "string"
-    ? message.includes("Access forbidden") || message.includes("forbidden")
+    ? /forbidden|too many requests|rate.?limit|node is (?:unhealthy|behind)/i.test(message)
     : false;
 };
 
@@ -82,47 +83,69 @@ const buildSolanaFetch = (urls: string[]) => async (
     return fetch(input, init);
   }
 
-  const method = init?.method ?? (input instanceof Request ? input.method : "POST");
-  const headers = new Headers(init?.headers ?? (input instanceof Request ? input.headers : {}));
+  const request = input instanceof Request ? input : undefined;
+  const signal = init?.signal ?? request?.signal;
+  signal?.throwIfAborted();
+  const method = init?.method ?? request?.method ?? "POST";
+  const headers = new Headers(init?.headers ?? request?.headers);
   const body = await normalizeRetryBody(input, init);
   const requestInit = { ...init, method, headers, body };
   let lastError: unknown = new Error(`Solana RPC request failed`);
 
-  const attempts = Math.min(urls.length, SOLANA_RPC_MAX_RETRIES);
+  const remaining = [...urls];
+  while (remaining.length) {
+    // Choose at dispatch time: a concurrent request may have cooled a provider.
+    const result = await solanaRpcScheduler.run(remaining, signal, async (endpoint) => {
+      remaining.splice(remaining.indexOf(endpoint), 1);
+      const controller = new AbortController();
+      const onAbort = () => controller.abort(signal?.reason);
+      signal?.addEventListener("abort", onAbort, { once: true });
+      // Queueing does not consume the provider's network/body deadline.
+      const timeout = setTimeout(
+        () => controller.abort(new DOMException("Solana RPC request timed out", "TimeoutError")),
+        SOLANA_RPC_TIMEOUT_MS
+      );
 
-  for (let attempt = 0; attempt < attempts; attempt += 1) {
-    const endpoint = urls[attempt % urls.length];
-
-    try {
-      const response = await fetch(endpoint, requestInit);
-      // Read from a clone so the original response body remains untouched when
-      // we return non-retryable failures directly.
-      const responseText = response.ok ? await response.clone().text() : null;
-      const isTransient = shouldRetrySolanaRequest(response, responseText);
-
-      if (isTransient && attempt < attempts - 1) {
-        lastError = new Error(
-          `Solana RPC transient error from ${endpoint}: ${response.status}`
-        );
-        continue;
+      try {
+        const response = await fetch(endpoint, { ...requestInit, signal: controller.signal });
+        const responseText = await response.text();
+        const transient = shouldRetrySolanaRequest(response, responseText);
+        if (transient) {
+          const { code, message } = parseSolanaRpcError(responseText);
+          const rateLimited = response.status === 429 || code === 429 ||
+            /too many requests|rate.?limit/i.test(message ?? "");
+          const forbidden = response.status === 403 || code === 403 ||
+            /forbidden/i.test(message ?? "");
+          solanaRpcScheduler.failed(
+            endpoint,
+            response.headers.get("retry-after"),
+            forbidden ? 60_000 : rateLimited ? 5_000 : 1_000
+          );
+        } else if (response.ok) {
+          solanaRpcScheduler.succeeded(endpoint);
+        }
+        return {
+          response: new Response(responseText || null, {
+            status: response.status,
+            statusText: response.statusText,
+            headers: response.headers,
+          }),
+          transient,
+        };
+      } catch (error) {
+        signal?.throwIfAborted();
+        solanaRpcScheduler.failed(endpoint);
+        return { error };
+      } finally {
+        clearTimeout(timeout);
+        signal?.removeEventListener("abort", onAbort);
       }
-
-      if (responseText !== null) {
-        // We consumed the clone body above; return a fresh Response so callers
-        // can read the payload exactly once.
-        return new Response(responseText, {
-          status: response.status,
-          statusText: response.statusText,
-          headers: response.headers,
-        });
-      }
-
-      return response;
-    } catch (error) {
-      lastError = error;
-      if (attempt < attempts - 1) {
-        continue;
-      }
+    });
+    if (result.response) {
+      if (!result.transient || !remaining.length) return result.response;
+      lastError = new Error(`Solana RPC transient error: ${result.response.status}`);
+    } else {
+      lastError = result.error;
     }
   }
 
@@ -201,11 +224,22 @@ export const createEvmPublicClient = (
     walletChainId,
     env
   );
+  // Server receipt checks do not need the browser CORS/latency filter, which can
+  // leave only a quota-limited provider. Keep wallet/browser routing unchanged.
+  const serverRpcUrls = typeof window === "undefined" && !walletProvider
+    ? [...new Set(chain.rpcEndpoints ?? [])]
+    : [];
+  const publicTransport = serverRpcUrls.length
+    ? fallback([
+        ...serverRpcUrls.map(url => http(url, { retryCount: 0 })),
+        transport,
+      ], { retryCount: 0 })
+    : transport;
   const viemChain = mapChainToViem(chain);
 
   return createPublicClient({
     chain: viemChain,
-    transport,
+    transport: publicTransport,
   });
 };
 
@@ -222,6 +256,8 @@ export const getSolanaConnectionOptions = (
     endpoint: urls[0],
     config: {
       commitment,
+      // This fetch already handles rate limits across all providers.
+      disableRetryOnRateLimit: true,
       fetch: buildSolanaFetch(urls),
     },
   };

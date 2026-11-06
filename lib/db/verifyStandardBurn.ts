@@ -4,9 +4,24 @@ import { createHash } from "node:crypto";
 import { getAssociatedTokenAddressSync } from "@solana/spl-token";
 import { PublicKey } from "@solana/web3.js";
 import { createEvmPublicClient, createSolanaConnection } from "@/lib/rpc/clients";
+import { getAllSupportedChains } from "@/lib/bridgeConfig";
 import { resolveBridgeChainUniversal } from "@/lib/metadata";
-import { BRIDGE_WITH_PREAPPROVAL_ABI, TOKEN_MESSENGER_ABI } from "@/lib/cctp/evm/burn";
+import { BRIDGE_WITH_PREAPPROVAL_ABI, TOKEN_MESSENGER_ABI, BRIDGE_WITH_HOOK_ABI, TOKEN_MESSENGER_WITH_HOOK_ABI, FORWARDING_HOOK_DATA } from "@/lib/cctp/evm/burn";
 import { standardFeeReservations } from "./schema";
+
+/** Verify Circle's forwarding frame against the destination domain and actual mint recipient. */
+function validForwardingHook(hook: string, domain: number, mintRecipient: string, isTestnet: boolean): boolean {
+  const destination = getAllSupportedChains(isTestnet ? "testnet" : "mainnet").find(c => c.cctp?.domain === domain);
+  if (!destination?.cctp?.forwarderSupported?.destination) return false;
+  if (destination.type !== "solana") return hook.toLowerCase() === FORWARDING_HOOK_DATA;
+  // Solana forwarding requests ATA creation for its encoded owner.
+  if (!/^0x[0-9a-f]{130}$/i.test(hook) || hook.slice(0, 58).toLowerCase() !== FORWARDING_HOOK_DATA.slice(0, 58) || hook.slice(58, 68).toLowerCase() !== "0000002101") return false;
+  try {
+    const owner = new PublicKey(Buffer.from(hook.slice(68), "hex"));
+    const ata = getAssociatedTokenAddressSync(new PublicKey(destination.usdcAddress!), owner, true);
+    return `0x${Buffer.from(ata.toBytes()).toString("hex")}`.toLowerCase() === mintRecipient.toLowerCase();
+  } catch { return false; }
+}
 
 type Reservation = typeof standardFeeReservations.$inferSelect;
 
@@ -33,12 +48,18 @@ export async function verifyStandardBurn(r: Reservation): Promise<"confirmed" | 
     if (tx.meta.err) return finalized ? "failed" : "received";
     const mint = new PublicKey(metadata.usdcAddress);
     const source = getAssociatedTokenAddressSync(mint, new PublicKey(r.address)).toBase58();
-    const recipient = getAssociatedTokenAddressSync(mint, new PublicKey(r.recipient)).toBase58();
+    const recipient = getAssociatedTokenAddressSync(mint, new PublicKey(r.recipient), true).toBase58();
     const discriminator = createHash("sha256").update("global:deposit_for_burn").digest().subarray(0, 8);
+    const hookDiscriminator = createHash("sha256").update("global:deposit_for_burn_with_hook").digest().subarray(0, 8);
     const burns = tx.transaction.message.instructions.filter(ix => {
       if (!("data" in ix) || ix.programId.toBase58() !== "CCTPV2vPZJS2u2BBsUoscuikbYjnpFmbFsvVuJdgUMQe") return false;
       const data = Buffer.from(utils.bytes.bs58.decode(ix.data));
-      return data.length === 96 && data.subarray(0, 8).equals(discriminator)
+      const plain = data.length === 96 && data.subarray(0, 8).equals(discriminator);
+      const hooked = data.length >= 100 && data.subarray(0, 8).equals(hookDiscriminator)
+        && data.readUInt32LE(96) === data.length - 100
+        && data.subarray(52, 84).equals(Buffer.alloc(32))
+        && validForwardingHook(`0x${data.subarray(100).toString("hex")}`, data.readUInt32LE(16), `0x${data.subarray(20, 52).toString("hex")}`, r.sourceChainId === "Solana_Devnet");
+      return (plain || hooked)
         && data.readBigUInt64LE(8) === amount && data.readUInt32LE(92) === 2000
         && ix.accounts.some(a => a.toBase58() === source)
         && ix.accounts.some(a => a.equals(mint));
@@ -77,13 +98,15 @@ export async function verifyStandardBurn(r: Reservation): Promise<"confirmed" | 
   let finality: number;
   if (r.feeAtomic > 0) {
     if (tx.to?.toLowerCase() !== chain.kitContracts?.bridge?.toLowerCase()) throw new Error("Bridge contract mismatch");
-    const { args } = decodeFunctionData({ abi: BRIDGE_WITH_PREAPPROVAL_ABI, data: tx.input });
+    const { args, functionName } = decodeFunctionData({ abi: [...BRIDGE_WITH_PREAPPROVAL_ABI, ...BRIDGE_WITH_HOOK_ABI], data: tx.input });
+    if (functionName === "bridgeWithPreapprovalAndHook" && (!validForwardingHook(args[1]!, args[0].destinationDomain, args[0].mintRecipient, Boolean(chain.isTestnet)) || args[0].destinationCaller !== `0x${"0".repeat(64)}`)) throw new Error("Forwarding hook mismatch");
     const params = args[0];
     if (params.fee !== BigInt(r.feeAtomic) || params.feeRecipient.toLowerCase() !== r.recipient.toLowerCase()) throw new Error("Fee calldata mismatch");
     burnAmount = params.amount; burnToken = params.burnToken; finality = params.minFinalityThreshold;
   } else {
     if (tx.to?.toLowerCase() !== chain.cctp?.contracts?.v2?.tokenMessenger?.toLowerCase()) throw new Error("Token messenger mismatch");
-    const { args } = decodeFunctionData({ abi: TOKEN_MESSENGER_ABI, data: tx.input });
+    const { args, functionName } = decodeFunctionData({ abi: [...TOKEN_MESSENGER_ABI, ...TOKEN_MESSENGER_WITH_HOOK_ABI], data: tx.input });
+    if (functionName === "depositForBurnWithHook" && (!validForwardingHook(args[7]!, args[1], args[2], Boolean(chain.isTestnet)) || args[4] !== `0x${"0".repeat(64)}`)) throw new Error("Forwarding hook mismatch");
     burnAmount = args[0]; burnToken = args[3]; finality = args[6];
   }
   if (burnAmount !== amount || burnToken.toLowerCase() !== chain.usdcAddress?.toLowerCase() || finality !== 2000) throw new Error("Standard burn calldata mismatch");

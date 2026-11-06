@@ -9,54 +9,82 @@ export async function standardFeeApi<T>(body: object): Promise<T> {
 }
 
 export async function reserveStandardFeeClient(input: StandardFeeRequest) {
-  localStorage.setItem(storageKey(input.address), JSON.stringify({ request: input }));
+  saveRecovery(input.address, { request: input });
   return standardFeeApi<StandardFeeReservation>({ action: "reserve", ...input });
 }
 
 export const updateStandardFeeClient = (r: StandardFeeReservation, action: "broadcast" | "cancel" | "submit" | "rejected", burnHash?: string) =>
   standardFeeApi<{ ok: boolean; pendingReceipt?: boolean }>({ action, id: r.id, token: r.token, burnHash });
 
-const storageKey = (address: string) => `cctp-standard-fee:${address.startsWith("0x") ? address.toLowerCase() : address}`;
+const storagePrefix = "cctp-standard-fee:";
+const storageKey = (address: string) => `${storagePrefix}${address.startsWith("0x") ? address.toLowerCase() : address}`;
+interface SavedStandardFee {
+  reservation?: StandardFeeReservation;
+  burnHash?: string;
+  request?: StandardFeeRequest;
+}
+const recoveryId = (entry: SavedStandardFee) => entry.reservation?.id ?? entry.request?.requestId;
+function readRecovery(address: string): SavedStandardFee[] {
+  const saved = localStorage.getItem(storageKey(address));
+  if (!saved) return [];
+  const data = JSON.parse(saved) as SavedStandardFee | SavedStandardFee[];
+  // Migrate the previously persisted single reservation on the next write.
+  return Array.isArray(data) ? data : [data];
+}
+function saveRecovery(address: string, entry: SavedStandardFee) {
+  const entries = readRecovery(address);
+  const index = entries.findIndex(saved => recoveryId(saved) === recoveryId(entry));
+  if (index < 0) entries.push(entry);
+  else entries[index] = { ...entries[index], ...entry };
+  localStorage.setItem(storageKey(address), JSON.stringify(entries));
+}
 export function saveStandardFee(address: string, r: StandardFeeReservation, burnHash?: string) {
-  // Persist before broadcast so a refresh cannot discard the reservation.
-  localStorage.setItem(storageKey(address), JSON.stringify({ reservation: r, burnHash }));
+  // Keep every unresolved burn when another bridge starts before its receipt appears.
+  saveRecovery(address, { reservation: r, ...(burnHash ? { burnHash } : {}) });
 }
 export async function recoverStandardFee(address: string) {
-  const saved = localStorage.getItem(storageKey(address));
-  if (!saved) return;
-  const data = JSON.parse(saved) as { reservation?: StandardFeeReservation; burnHash?: string; request?: StandardFeeRequest };
-  let reservation = data.reservation;
-  const { burnHash } = data;
-  if (!reservation && data.request) {
+  for (const data of readRecovery(address)) {
+    const id = recoveryId(data);
+    if (!id) continue;
     try {
-      reservation = await standardFeeApi<StandardFeeReservation>({ action: "reserve", ...data.request });
+      let reservation = data.reservation;
+      if (!reservation && data.request) {
+        reservation = await standardFeeApi<StandardFeeReservation>({ action: "reserve", ...data.request });
+        saveStandardFee(address, reservation);
+      }
+      if (!reservation) continue;
+      if (data.burnHash) {
+        const result = await updateStandardFeeClient(reservation, "submit", data.burnHash);
+        if (result.pendingReceipt) continue;
+      } else {
+        // An uncertain broadcast must not be released; the server rejects its cancellation.
+        await updateStandardFeeClient(reservation, "cancel");
+      }
+      clearStandardFee(address, id);
     } catch (error) {
-      if ((error as { code?: string }).code === "EXPIRED_UNRESERVED") { clearStandardFee(address); return; }
-      throw error;
+      if (error instanceof Error && "code" in error && error.code === "EXPIRED_UNRESERVED") clearStandardFee(address, id);
+      // Recovery is best effort, not a wallet lock. Preserve the entry for the next attempt.
     }
   }
-  if (!reservation) throw new Error("Unable to recover the previous fee reservation");
-  if (burnHash) {
-    const result = await updateStandardFeeClient(reservation, "submit", burnHash);
-    if (result.pendingReceipt) throw new Error("Your previous Standard bridge receipt is not available yet. Please retry shortly.");
-  }
-  else await updateStandardFeeClient(reservation, "cancel");
-  localStorage.removeItem(storageKey(address));
 }
 
-export function clearStandardFee(address: string) { localStorage.removeItem(storageKey(address)); }
+export function clearStandardFee(address: string, id: string) {
+  const entries = readRecovery(address).filter(entry => recoveryId(entry) !== id);
+  if (entries.length) localStorage.setItem(storageKey(address), JSON.stringify(entries));
+  else localStorage.removeItem(storageKey(address));
+}
 
 /** Receipt polling is a hint; the server independently verifies the chain. */
 export async function notifyStandardFeeReceipt(burnHash: string) {
   for (let i = 0; i < localStorage.length; i++) {
     const key = localStorage.key(i);
-    if (!key?.startsWith("cctp-standard-fee:")) continue;
-    const saved = localStorage.getItem(key);
-    if (!saved) continue;
-    let data: { reservation?: StandardFeeReservation; burnHash?: string };
-    try { data = JSON.parse(saved); } catch { continue; }
-    if (data.reservation && data.burnHash === burnHash) {
-      await updateStandardFeeClient(data.reservation, "submit", burnHash);
+    if (!key?.startsWith(storagePrefix)) continue;
+    let entries: SavedStandardFee[];
+    try { entries = readRecovery(key.slice(storagePrefix.length)); } catch { continue; }
+    for (const data of entries) {
+      if (data.reservation && data.burnHash === burnHash) {
+        await updateStandardFeeClient(data.reservation, "submit", burnHash);
+      }
     }
   }
 }

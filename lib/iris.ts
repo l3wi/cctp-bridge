@@ -138,6 +138,7 @@ export interface IrisAttestationResponse {
     eventNonce: string;
     status: "pending" | "pending_confirmations" | "complete";
     cctpVersion: number;
+    forwardTxHash?: string;
     /** Reason for delayed attestation (e.g., "insufficient_fee" for fast transfers without proper fee) */
     delayReason?: string;
     decodedMessage?: {
@@ -159,6 +160,7 @@ export interface IrisAttestationResponse {
 }
 
 export interface AttestationData {
+  forwardTxHash?: string;
   message?: `0x${string}`;
   attestation?: `0x${string}`;
   status: "pending" | "pending_confirmations" | "complete";
@@ -324,6 +326,7 @@ export async function fetchAttestation(
         return null;
       }
       return {
+        forwardTxHash: msg.forwardTxHash && (isValidEvmTxHash(msg.forwardTxHash) || isValidSolanaTxHash(msg.forwardTxHash)) ? msg.forwardTxHash : undefined,
         status: msg.status,
         nonce: msg.eventNonce,
         delayReason: msg.delayReason,
@@ -491,7 +494,8 @@ export async function fetchAttestationUniversal(
         }
 
         const pendingResult: AttestationData = {
-          status: msg.status,
+          forwardTxHash: msg.forwardTxHash && (isValidEvmTxHash(msg.forwardTxHash) || isValidSolanaTxHash(msg.forwardTxHash)) ? msg.forwardTxHash : undefined,
+        status: msg.status,
           nonce: msg.eventNonce,
           delayReason: msg.delayReason,
         };
@@ -522,6 +526,7 @@ export async function fetchAttestationUniversal(
       const attestationResult: AttestationData = {
         message,
         attestation,
+        forwardTxHash: msg.forwardTxHash && (isValidEvmTxHash(msg.forwardTxHash) || isValidSolanaTxHash(msg.forwardTxHash)) ? msg.forwardTxHash : undefined,
         status: msg.status,
         sourceDomain,
         destinationDomain,
@@ -652,7 +657,8 @@ export async function fetchAttestationByNonceUniversal(
         }
 
         const pendingAttestation: AttestationData = {
-          status: msg.status,
+          forwardTxHash: msg.forwardTxHash && (isValidEvmTxHash(msg.forwardTxHash) || isValidSolanaTxHash(msg.forwardTxHash)) ? msg.forwardTxHash : undefined,
+        status: msg.status,
           nonce: msg.eventNonce,
           delayReason: msg.delayReason,
         };
@@ -690,6 +696,7 @@ export async function fetchAttestationByNonceUniversal(
       const attestationResult: AttestationData = {
         message,
         attestation,
+        forwardTxHash: msg.forwardTxHash && (isValidEvmTxHash(msg.forwardTxHash) || isValidSolanaTxHash(msg.forwardTxHash)) ? msg.forwardTxHash : undefined,
         status: msg.status,
         sourceDomain,
         destinationDomain,

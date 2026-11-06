@@ -114,6 +114,7 @@ export interface SolanaBurnParams {
   maxFee: bigint;
   minFinalityThreshold: number;
   sourceChainId: SolanaChainId;
+  hookData?: `0x${string}`;
   appFeeAmount?: bigint;
   appFeeRecipient?: string;
 }
@@ -141,6 +142,7 @@ export async function buildDepositForBurnTransaction(
     sourceChainId,
     appFeeAmount = 0n,
     appFeeRecipient,
+    hookData,
   } = params;
 
   if (amount <= 0n) {
@@ -218,19 +220,10 @@ export async function buildDepositForBurnTransaction(
     destinationChainId
   );
 
-  // Fund message account for rent (~0.0039 SOL)
-  // This is a refundable rent deposit, not a fee
-  // Account size: ~250 bytes (8 discriminator + 32 emitter + ~200 message data)
-  const MESSAGE_ACCOUNT_SIZE = 250;
-  const RENT_FALLBACK = 3_900_000; // Conservative fallback if RPC fails
-
-  let rentExemptLamports: number;
-  try {
-    rentExemptLamports = await connection.getMinimumBalanceForRentExemption(MESSAGE_ACCOUNT_SIZE);
-  } catch {
-    // Use conservative fallback if RPC call fails
-    rentExemptLamports = RENT_FALLBACK;
-  }
+  // Circle v2 MessageSent: discriminator8 + rent_payer32 + created_at8 + Vec prefix4,
+  // plus message header148 and burn body228. The hook is appended to that body.
+  const MESSAGE_ACCOUNT_SIZE = 428 + (hookData ? (hookData.length - 2) / 2 : 0);
+  const rentExemptLamports = await connection.getMinimumBalanceForRentExemption(MESSAGE_ACCOUNT_SIZE);
 
   const fundMessageAccountIx = SystemProgram.transfer({
     fromPubkey: user,
@@ -245,14 +238,16 @@ export async function buildDepositForBurnTransaction(
    * The method signature is validated by the IDL, not compile-time types.
    */
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const depositForBurnIx = await (tokenMessenger.methods as any)
-    .depositForBurn({
+  const burnMethod = hookData ? "depositForBurnWithHook" : "depositForBurn";
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const depositForBurnIx = await (tokenMessenger.methods as any)[burnMethod]({
       amount: new BN(amount.toString()),
       destinationDomain,
       mintRecipient: mintRecipientKey,
       destinationCaller: PublicKey.default, // No specific caller restriction
       maxFee: new BN(maxFee.toString()),
       minFinalityThreshold,
+      ...(hookData ? { hookData: Buffer.from(hookData.slice(2), "hex") } : {}),
     })
     .accounts({
       owner: user,
@@ -287,6 +282,13 @@ export async function buildDepositForBurnTransaction(
   transaction.recentBlockhash = blockhash;
   transaction.lastValidBlockHeight = lastValidBlockHeight;
   transaction.feePayer = user;
+
+  const fee = await connection.getFeeForMessage(transaction.compileMessage(), "confirmed");
+  if (fee.value === null) throw new Error("Unable to estimate Solana transaction fee. Please retry.");
+  const balance = await connection.getBalance(user, "confirmed");
+  if (balance < rentExemptLamports + fee.value) {
+    throw new Error("Insufficient SOL for the message account rent and transaction fee");
+  }
 
   return { transaction, messageAccount };
 }

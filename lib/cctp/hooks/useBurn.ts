@@ -7,6 +7,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useStandardFeeConfirmation } from "@/components/bridge-card/StandardFeeConfirmation";
 import { useAccount, useWalletClient } from "wagmi";
 import { useWallet } from "@solana/wallet-adapter-react";
+import { utils } from "@coral-xyz/anchor";
 import { useToast } from "@/components/ui/use-toast";
 import { getExplorerTxUrlUniversal, BRIDGEKIT_ENV } from "@/lib/bridgeConfig";
 import { createEvmPublicClient, createSolanaConnection } from "@/lib/rpc/clients";
@@ -32,6 +33,7 @@ import {
   calculateMaxFee,
   prepareEvmBurn,
 } from "../evm/burn";
+import { getForwardingQuote, getForwardingHookData } from "../forwarding";
 import { getFastTransferFeeQuote } from "../fastTransferFee";
 import { type StandardFeeReservation, type StandardFeeRequest } from "../cumulativeFee";
 import { previewStandardFeeClient, reserveStandardFeeClient, updateStandardFeeClient, recoverStandardFee, saveStandardFee, clearStandardFee } from "../standardFeeClient";
@@ -102,6 +104,8 @@ export function useBurn() {
           amount: params.amount,
           recipientAddress: params.recipientAddress,
           transferSpeed: params.transferSpeed,
+          automaticClaim: params.automaticClaim,
+          forwardingMaxFee: params.forwardingMaxFee,
           appFeeAmount: params.appFeeAmount,
           appFeeBps: params.appFeeBps,
           appFeeRecipient: params.appFeeRecipient as `0x${string}` | undefined,
@@ -218,6 +222,19 @@ export function useBurn() {
           return handleBurnError(approvalError, "approval");
         }
 
+        // Approval may outlive the quote: recheck before requesting the burn signature.
+        if (params.automaticClaim) {
+          const quote = await getForwardingQuote({
+            sourceChainId, destinationChainId: params.destinationChainId,
+            amount: burnConfig.bridgeAmount, speed: params.transferSpeed,
+            isTestnet: BRIDGEKIT_ENV === "testnet", recipientAddress: params.recipientAddress,
+          });
+          if (!params.forwardingMaxFee || !/^\d+$/.test(params.forwardingMaxFee) || quote.maxFee > BigInt(params.forwardingMaxFee)) {
+            throw Object.assign(new Error("Automatic claim fees changed. Please refresh the quote and try again."), { code: "FORWARDING_FEE_CHANGED" });
+          }
+          burnConfig.maxFee = quote.maxFee;
+        }
+
         // Step 2: Burn
         toast({
           title: "Sign transaction",
@@ -235,6 +252,7 @@ export function useBurn() {
 	                burnToken: burnConfig.usdcAddress,
 	                minFinalityThreshold: burnConfig.minFinalityThreshold,
 	                maxFee: burnConfig.maxFee,
+                    hookData: burnConfig.hookData,
 	                fee: burnConfig.appFeeAmount,
 	                feeRecipient: burnConfig.appFeeRecipient,
 		              })
@@ -245,6 +263,7 @@ export function useBurn() {
 	                burnToken: burnConfig.usdcAddress,
 	                minFinalityThreshold: burnConfig.minFinalityThreshold,
 	                maxFee: burnConfig.maxFee,
+                    hookData: burnConfig.hookData,
 	              });
 
         assertWalletOnSourceChain(walletClient.chain?.id, sourceChainId);
@@ -275,7 +294,9 @@ export function useBurn() {
 	          appFeeRecipient: burnConfig.appFeeRecipient,
 	        };
       } catch (error) {
-        if (isUserRejection(error)) await onRejected?.();
+        if (isUserRejection(error)) {
+          try { await onRejected?.(); } catch { /* Retain recovery without replacing the wallet rejection. */ }
+        }
         return handleBurnError(error, "burn");
       }
     },
@@ -286,7 +307,7 @@ export function useBurn() {
    * Execute a burn on Solana chain.
    */
   const executeSolanaBurn = useCallback(
-    async (params: BurnParams, beforeBroadcast?: () => Promise<void>): Promise<BurnResult> => {
+    async (params: BurnParams, beforeBroadcast?: (burnHash: string) => Promise<void>): Promise<BurnResult> => {
       const sourceChainId = params.sourceChainId as SolanaChainId;
 
       // Validate wallet connection
@@ -333,7 +354,13 @@ export function useBurn() {
 	          };
 	        }
 
-	        if (params.transferSpeed === "fast") {
+	        if (params.automaticClaim) {
+          const quote = await getForwardingQuote({ sourceChainId, destinationChainId: params.destinationChainId, amount: bridgeAmount, speed: params.transferSpeed, isTestnet, recipientAddress: params.recipientAddress });
+          if (!params.forwardingMaxFee || !/^\d+$/.test(params.forwardingMaxFee) || quote.maxFee > BigInt(params.forwardingMaxFee)) {
+            throw Object.assign(new Error("Automatic claim fees changed. Please refresh the quote and try again."), { code: "FORWARDING_FEE_CHANGED" });
+          }
+          maxFee = quote.maxFee;
+        } else if (params.transferSpeed === "fast") {
           try {
             const sourceDomain = getCctpDomain(sourceChainId);
             maxFee = await calculateMaxFee(
@@ -365,8 +392,10 @@ export function useBurn() {
           description: "Preparing CCTP burn transaction...",
         });
 
+        const hookData = params.automaticClaim ? getForwardingHookData(params.destinationChainId, params.recipientAddress) : undefined;
+
         // Build transaction
-	        const { transaction, messageAccount } = await buildDepositForBurnTransaction({
+	        let { transaction, messageAccount } = await buildDepositForBurnTransaction({
 	          connection,
 	          user: solanaWallet.publicKey,
 	          amount: bridgeAmount,
@@ -377,6 +406,7 @@ export function useBurn() {
 	          sourceChainId,
 	          appFeeAmount,
 	          appFeeRecipient,
+            hookData,
 	        });
 
         toast({
@@ -384,14 +414,31 @@ export function useBurn() {
           description: "Please approve the transaction in your wallet...",
         });
 
+        if (params.automaticClaim) {
+          const fresh = await getForwardingQuote({ sourceChainId, destinationChainId: params.destinationChainId, amount: bridgeAmount, speed: params.transferSpeed, isTestnet, recipientAddress: params.recipientAddress });
+          if (!params.forwardingMaxFee || fresh.maxFee > BigInt(params.forwardingMaxFee)) {
+            throw Object.assign(new Error("Automatic claim fees changed. Please refresh the quote and try again."), { code: "FORWARDING_FEE_CHANGED" });
+          }
+          if (fresh.maxFee !== maxFee) {
+            maxFee = fresh.maxFee;
+            ({ transaction, messageAccount } = await buildDepositForBurnTransaction({
+              connection, user: solanaWallet.publicKey, amount: bridgeAmount,
+              destinationChainId: params.destinationChainId, mintRecipient: params.recipientAddress,
+              maxFee, minFinalityThreshold, sourceChainId, appFeeAmount, appFeeRecipient, hookData,
+            }));
+          }
+        }
+
         // Sign with wallet
         const signedTx = await solanaWallet.signTransaction(transaction);
 
         // Partial sign with message account (required for CCTP)
         signedTx.partialSign(messageAccount);
 
-        // Send WITHOUT waiting for confirmation
-        await beforeBroadcast?.();
+        // The signed transaction's first signature is its exact transaction ID, even if RPC sending fails.
+        if (!signedTx.signature) throw new Error("Wallet did not sign the burn transaction");
+        const signedHash = utils.bytes.bs58.encode(signedTx.signature);
+        await beforeBroadcast?.(signedHash);
         const signature = await sendTransactionNoConfirm(connection, signedTx);
 
         // Success
@@ -426,15 +473,31 @@ export function useBurn() {
       setIsBurning(true);
       let reservation: StandardFeeReservation | undefined;
       let broadcasting = false;
+      let broadcastRequested = false;
       const address = isSolanaChain(params.sourceChainId) ? solanaWallet.publicKey?.toBase58() : evmAddress;
       try {
         if (params.transferSpeed === "standard") {
           if (!address) throw new Error("Connect your wallet to check the Standard fee");
           await recoverStandardFee(address);
           const preview = await previewStandardFeeClient({ address, sourceChainId: params.sourceChainId, amountAtomic: params.amount.toString() });
-          if (preview.chargeFee && !await confirmStandardFee({ ...preview, amountAtomic: params.amount.toString() })) {
+          let forwardingFeeAtomic: string | undefined;
+          let forwardingFeeCapAtomic: string | undefined;
+          if (preview.chargeFee && params.automaticClaim) {
+            const quote = await getForwardingQuote({
+              sourceChainId: params.sourceChainId, destinationChainId: params.destinationChainId,
+              amount: params.amount - BigInt(preview.feeAtomic), speed: "standard",
+              isTestnet: BRIDGEKIT_ENV === "testnet", recipientAddress: params.recipientAddress,
+            });
+            if (!params.forwardingMaxFee || !/^\d+$/.test(params.forwardingMaxFee) || quote.maxFee > BigInt(params.forwardingMaxFee)) {
+              throw Object.assign(new Error("Automatic claim fees changed. Please refresh the quote and try again."), { code: "FORWARDING_FEE_CHANGED" });
+            }
+            forwardingFeeAtomic = quote.maxFee.toString();
+            forwardingFeeCapAtomic = params.forwardingMaxFee;
+          }
+          if (preview.chargeFee && !await confirmStandardFee({ ...preview, amountAtomic: params.amount.toString(), forwardingFeeAtomic, forwardingFeeCapAtomic })) {
             throw Object.assign(new Error("User rejected fee confirmation"), { code: 4001 });
           }
+          if (forwardingFeeCapAtomic) params = { ...params, forwardingMaxFee: forwardingFeeCapAtomic };
           const currentAddress = isSolanaChain(params.sourceChainId) ? currentWallets.current.solanaAddress : currentWallets.current.evmAddress;
           if (!currentWallets.current.mounted || currentAddress !== address) throw new Error("Wallet changed. Please restart the bridge.");
           const request: StandardFeeRequest = {
@@ -447,17 +510,19 @@ export function useBurn() {
           if (fee !== BigInt(preview.feeAtomic)) throw new Error("Your Standard fee changed. Please retry to review the updated amount.");
           params = { ...params, appFeeAmount: fee, appFeeBps: Number(fee * 10_000_000n / params.amount) / 1_000, appFeeRecipient: reservation.recipient };
         }
-        const beforeBroadcast = reservation ? async () => {
-          // Treat an uncertain API response as broadcasting too: never release it blindly.
-          broadcasting = true;
+        const beforeBroadcast = reservation ? async (burnHash?: string) => {
+          if (burnHash && address) saveStandardFee(address, reservation!, burnHash);
+          broadcastRequested = true;
           await updateStandardFeeClient(reservation!, "broadcast");
+          // Only a wallet/RPC send may now have broadcast; a failed API call definitely did not.
+          broadcasting = true;
         } : undefined;
         const result = isSolanaChain(params.sourceChainId)
           ? await executeSolanaBurn(params, beforeBroadcast)
           : await executeEvmBurn(params, callbacks, beforeBroadcast, async () => {
             if (reservation && address) {
               await updateStandardFeeClient(reservation, "rejected");
-              clearStandardFee(address);
+              clearStandardFee(address, reservation.id);
             }
           });
         if (reservation && address && result.burnTxHash) {
@@ -472,7 +537,7 @@ export function useBurn() {
         return handleBurnError(error, "burn");
       } finally {
         if (reservation && address && !broadcasting) {
-          try { await updateStandardFeeClient(reservation, "cancel"); clearStandardFee(address); } catch { /* Keep the reservation for recovery. */ }
+          try { await updateStandardFeeClient(reservation, broadcastRequested ? "rejected" : "cancel"); clearStandardFee(address, reservation.id); } catch { /* Keep the reservation for recovery. */ }
         }
         setIsBurning(false);
       }

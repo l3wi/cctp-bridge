@@ -35,7 +35,6 @@ export {
   getUsdcAddressByDomain,
   getCctpConfirmationsUniversal,
 } from "@/lib/metadata/index";
-export { getSolanaRpcEndpoint } from "@/lib/rpc/router";
 export { getProviderFromWalletClient } from "@/lib/rpc/clients";
 
 type NonEmptyChains = [Chain, ...Chain[]];

@@ -2,6 +2,10 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { useTransactionStore } from "@/lib/store/transactionStore";
 
 describe("transactionStore upsertTransaction", () => {
+  it("retains automatic claim authorization through normalization", () => {
+    useTransactionStore.getState().upsertTransaction({ originChain: 1, targetChain: 5042, hash: `0x${"e".repeat(64)}`, status: "pending", version: "v3", automaticClaim: true, forwardingMaxFee: "60000" });
+    expect(useTransactionStore.getState().transactions[0]).toMatchObject({ automaticClaim: true, forwardingMaxFee: "60000" });
+  });
   beforeEach(() => {
     useTransactionStore.setState({
       transactions: [],

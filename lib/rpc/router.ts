@@ -1,8 +1,7 @@
 import { http, type EIP1193Provider, type Transport, custom, fallback } from "viem";
 import type { BridgeEnvironment } from "@/lib/metadata/types";
-import type { SolanaChainId } from "@/lib/types";
 import { BRIDGEKIT_ENV } from "@/lib/metadata/index";
-import { getConfiguredEvmRpcUrls, getConfiguredSolanaRpcUrls } from "@/lib/rpc/config";
+import { getConfiguredEvmRpcUrls } from "@/lib/rpc/config";
 
 const DEFAULT_ENV: BridgeEnvironment = BRIDGEKIT_ENV;
 
@@ -95,19 +94,6 @@ export const getPreferredEvmRpcUrl = (
 ): string | undefined => {
   const urls = getConfiguredEvmRpcUrls(chainId);
   return urls[0];
-};
-
-export const getSolanaRpcEndpoint = (
-  chainId: SolanaChainId,
-  env: BridgeEnvironment = DEFAULT_ENV
-): string => {
-  const urls = getConfiguredSolanaRpcUrls(chainId);
-  if (!urls.length) {
-    throw new Error(`No Solana RPC endpoint configured for ${chainId}`);
-  }
-  const key = `solana:${env}:${chainId}`;
-  const index = getNextStartIndex(key, urls.length);
-  return urls[index];
 };
 
 export const getRotatingEvmTransport = (

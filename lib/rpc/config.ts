@@ -14,7 +14,12 @@ function isValidHttpUrl(url: string): boolean {
 }
 
 const fallbackSolana: Record<SolanaChainId, string[]> = {
-  Solana: ["https://solana-rpc.publicnode.com", "https://api.mainnet-beta.solana.com"],
+  Solana: [
+    "https://solana-rpc.publicnode.com",
+    "https://public.rpc.solanavibestation.com",
+    "https://solana-mainnet.gateway.tatum.io",
+    "https://solana.web3cdn.rest",
+  ],
   Solana_Devnet: ["https://api.devnet.solana.com"],
 };
 

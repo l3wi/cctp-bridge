@@ -69,6 +69,7 @@ export function useBurnPolling({
   });
 
   const pollingRef = useRef<NodeJS.Timeout | null>(null);
+  const burnCheckInFlightRef = useRef(false);
   const isMountedRef = useRef(true);
   const startTimeRef = useRef<number | null>(null);
 
@@ -275,7 +276,13 @@ export function useBurnPolling({
         }
       }
 
-      await checkBurn();
+      if (burnCheckInFlightRef.current) return;
+      burnCheckInFlightRef.current = true;
+      try {
+        await checkBurn();
+      } finally {
+        burnCheckInFlightRef.current = false;
+      }
     };
 
     // Run initial check

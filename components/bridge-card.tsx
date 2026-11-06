@@ -16,7 +16,9 @@ import { ArrowRight, Loader2 } from "lucide-react";
 import { BridgingState } from "@/components/bridging-state";
 import { ChainIcon } from "@/components/chain-icon";
 import { useAccount, useChains, useSwitchChain } from "wagmi";
-import { Chain } from "viem";
+import { Chain, formatUnits } from "viem";
+import { createEvmPublicClient } from "@/lib/rpc/clients";
+import { getArcMaxAmount } from "@/lib/cctp/arcGas";
 import {
   validateBridgeParams,
   validateAmount,
@@ -32,6 +34,8 @@ import {
 } from "@/lib/types";
 import type { BridgeIntent } from "@/lib/bridgeIntent";
 import { useCrossEcosystemBridge } from "@/lib/hooks/useCrossEcosystemBridge";
+import { supportsAutomaticClaim } from "@/lib/cctp/forwarding";
+import { BRIDGEKIT_ENV } from "@/lib/bridgeConfig";
 import { estimateBridgeFee } from "@/lib/cctp/estimate";
 import type { BridgeEstimate } from "@/lib/cctp/types";
 import { useBalance } from "@/lib/hooks/useBalance";
@@ -161,6 +165,7 @@ export function BridgeCard({
   >(null);
   const [bridgeResult, setBridgeResult] = useState<BridgeResult | null>(null);
   const [intentHydrated, setIntentHydrated] = useState(false);
+  const [intentFailureReason, setIntentFailureReason] = useState<string | undefined>();
   const [intentStarted, setIntentStarted] = useState(false);
   const [intentExecutionState, setIntentExecutionState] = useState<
     "idle" | "attempting" | "started" | "not-started" | "failed"
@@ -321,6 +326,11 @@ export function BridgeCard({
     // Per CCTP docs: Solana supports Fast Transfer as both source and destination
     return Boolean(getCctpConfirmationsUniversal(activeSourceChainId)?.fast);
   }, [activeSourceChainId]);
+
+  const [submittedAutomaticClaim, setSubmittedAutomaticClaim] = useState(false);
+  const [automaticClaimPreference, setAutomaticClaimPreference] = useState(true);
+  const automaticClaimSupported = activeSourceChainId != null && targetChainId != null && supportsAutomaticClaim(activeSourceChainId, targetChainId, BRIDGEKIT_ENV === "testnet");
+  const automaticClaim = automaticClaimSupported && automaticClaimPreference;
 
   const walletChainId = chain?.id;
 
@@ -543,10 +553,27 @@ export function BridgeCard({
     [activeSourceChainId, targetChain?.id, targetChainId]
   );
 
-  const handleMaxAmount = () => {
-    if (usdcFormatted) {
-      handleAmountChange(usdcFormatted);
+  const maxContextRef = useRef("");
+  maxContextRef.current = `${activeSourceChainId}:${address}:${amount?.str ?? ""}`;
+  const handleMaxAmount = async () => {
+    const requestContext = maxContextRef.current;
+    if ((activeSourceChainId === 5042 || activeSourceChainId === 5042002) && address) {
+      try {
+        const client = createEvmPublicClient(activeSourceChainId);
+        const [nativeBalance, fees] = await Promise.all([
+          client.getBalance({ address }),
+          client.estimateFeesPerGas(),
+        ]);
+        if (maxContextRef.current !== requestContext) return;
+        const max = getArcMaxAmount(evmUsdcBalance ?? 0n, nativeBalance, fees.maxFeePerGas);
+        handleAmountChange(formatUnits(max, 6));
+        if (max === 0n) toast({ title: "Not enough USDC for gas", description: "Keep some USDC on Arc to approve and send your transfer.", variant: "destructive" });
+      } catch {
+        toast({ title: "Couldn’t calculate gas reserve", description: "Please retry Max before sending your full Arc balance.", variant: "destructive" });
+      }
+      return;
     }
+    if (usdcFormatted) handleAmountChange(usdcFormatted);
   };
 
   // Form validation - check wallet based on source chain type
@@ -563,13 +590,21 @@ export function BridgeCard({
     [sourceChainType, solanaWallet.connected, chain, isSourceChainSynced, targetChain, targetChainId, amount]
   );
 
+  const quoteRecipient = useMemo(() => resolveRecipientForSend({
+    isCrossEcosystem, diffWallet, crossEcosystemTargetAddress,
+    validationTargetAddress, targetAddress, defaultTargetWalletAddress,
+    senderAddress: sourceChainType === "solana" ? solanaWallet.publicKey?.toBase58() : address,
+  }).finalTargetAddress, [isCrossEcosystem, diffWallet, crossEcosystemTargetAddress, validationTargetAddress,
+    targetAddress, defaultTargetWalletAddress, sourceChainType, solanaWallet.publicKey, address]);
+
   // Can we estimate? No wallet required with custom estimate function
   const hasSolanaWallet = solanaWallet.connected && !!solanaWallet.wallet?.adapter;
   const canEstimate =
     amountForEstimate.isValid &&
     chainSelectionValid &&
     activeSourceChainId != null &&
-    targetChainId != null;
+    targetChainId != null &&
+    (!automaticClaim || targetChainType !== "solana" || !!quoteRecipient);
 
   const estimateBridge = useCallback(
     async (transferSpeed: TransferSpeedValue): Promise<BridgeEstimate> => {
@@ -584,10 +619,12 @@ export function BridgeCard({
         sourceChainId: sourceId,
         destinationChainId: targetId,
         amount: amount.str,
+        automaticClaim,
+        recipientAddress: quoteRecipient,
         speed: transferSpeed === TransferSpeed.FAST ? "fast" : "standard",
       });
     },
-    [sourceChainId, targetChainId, amount, chain?.id]
+    [sourceChainId, targetChainId, amount, chain?.id, automaticClaim, quoteRecipient]
   );
 
   const {
@@ -602,10 +639,13 @@ export function BridgeCard({
       targetChainId, // Use targetChainId instead of targetChain?.id for Solana support
       amount?.str,
       "standard",
+      automaticClaim,
+      quoteRecipient,
     ],
     queryFn: () => estimateBridge(TransferSpeed.SLOW),
     enabled: canEstimate && enableFormQueries,
-    staleTime: 300_000,
+    staleTime: automaticClaim ? 15_000 : 300_000,
+    refetchInterval: automaticClaim ? 20_000 : false,
     retry: 3,
     retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 10000),
   });
@@ -622,10 +662,13 @@ export function BridgeCard({
       targetChainId, // Use targetChainId instead of targetChain?.id for Solana support
       amount?.str,
       "fast",
+      automaticClaim,
+      quoteRecipient,
     ],
     queryFn: () => estimateBridge(TransferSpeed.FAST),
     enabled: canEstimate && fastTransferSupported && enableFormQueries,
-    staleTime: 300_000,
+    staleTime: automaticClaim ? 15_000 : 300_000,
+    refetchInterval: automaticClaim ? 20_000 : false,
     retry: 3,
     retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 10000),
   });
@@ -795,6 +838,17 @@ export function BridgeCard({
       }
 
       const transferType = transferSpeed === TransferSpeed.FAST ? "fast" : "standard";
+      const selectedEstimate = transferType === "fast" ? fastEstimate : standardEstimate;
+      const forwardingMaxFee = mode === "executeIntent"
+        ? initialIntent?.forwardingMaxFee
+        : selectedEstimate?.forwardingMaxFee;
+      if (automaticClaim && (!forwardingMaxFee || (mode !== "executeIntent" &&
+          (!selectedEstimate?.forwardingQuotedAt || selectedEstimate.forwardingRecipient !== finalTargetAddress || Date.now() - selectedEstimate.forwardingQuotedAt > 30_000)))) {
+        setIntentFailureReason("Automatic claim fees changed or expired. Go back to review updated fees before bridging.");
+        toast({ title: "Refresh automatic claim fees", description: "Wait for a current fee quote before bridging.", variant: "destructive" });
+        return false;
+      }
+
 
       if (mode === "intentOnly") {
         onSubmitIntent?.({
@@ -803,15 +857,19 @@ export function BridgeCard({
           amount: amount.str,
           targetAddress: finalTargetAddress,
           transferType,
+          automaticClaim,
+          forwardingMaxFee,
         });
         return true;
       }
 
+      setIntentFailureReason(undefined);
       setIsLoading(true);
       setActiveTransferSpeed(transferSpeed);
       setBridgeResult(null);
       setBridgeStartedAt(new Date());
       setSubmittedRecipientAddress(finalTargetAddress);
+      setSubmittedAutomaticClaim(automaticClaim);
       const resolvedSourceChain =
         chainOptionById.get(selectedSourceId)?.chain || chain || null;
       setBridgeSourceChain(resolvedSourceChain);
@@ -851,6 +909,7 @@ export function BridgeCard({
           destination: {
             address: finalTargetAddress,
             chain: targetBridgeDefinition,
+            useForwarder: automaticClaim,
           },
           steps: pendingSteps,
         });
@@ -881,6 +940,8 @@ export function BridgeCard({
             targetChainId: targetChainId,
             targetAddress: finalTargetAddress,
             transferType,
+            automaticClaim,
+            forwardingMaxFee,
           },
           {
             onApprovalStart: () => {
@@ -950,6 +1011,7 @@ export function BridgeCard({
         return true;
       } catch (error) {
         console.error("Bridge transaction failed:", error);
+        setIntentFailureReason(getErrorMessage(error));
         setIsLoading(false);
         setIsBridging(false);
         setBridgeTransactionHash(pendingHash); // Keep placeholder hash if available
@@ -962,6 +1024,10 @@ export function BridgeCard({
       }
     },
     [
+      automaticClaim,
+      fastEstimate,
+      standardEstimate,
+      initialIntent,
       validation,
       chain,
       amount,
@@ -1103,6 +1169,7 @@ export function BridgeCard({
     setAmount(parsedAmount);
     setTargetAddress(initialIntent.targetAddress);
     setDiffWallet(true);
+    setAutomaticClaimPreference(initialIntent.automaticClaim === true);
     setActiveTransferSpeed(
       initialIntent.transferType === "fast"
         ? TransferSpeed.FAST
@@ -1229,7 +1296,11 @@ export function BridgeCard({
 
     const renderButton = (speed: TransferSpeedValue, isPrimary: boolean) => {
       const isSubmitting = speed === TransferSpeed.FAST ? isFastSubmitting : isStandardSubmitting;
-      const buttonText = validationMessage || (speed === TransferSpeed.FAST ? "Bridge Fast" : "Bridge Standard");
+      const estimate = speed === TransferSpeed.FAST ? fastEstimate : standardEstimate;
+      const quoteBusy = speed === TransferSpeed.FAST ? isFastEstimating : isStandardEstimating;
+      const quoteFailed = speed === TransferSpeed.FAST ? isFastEstimateError : isStandardEstimateError;
+      const automaticQuoteBlocked = automaticClaim && (quoteBusy || quoteFailed || !estimate?.forwardingMaxFee);
+      const buttonText = validationMessage || (automaticQuoteBlocked ? (quoteFailed ? "Automatic claim fees unavailable" : "Updating fees…") : null) || (speed === TransferSpeed.FAST ? "Bridge Fast" : "Bridge Standard");
       const buttonClass = isPrimary
         ? "w-full bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium py-2.5"
         : "w-full border border-slate-700 text-white hover:bg-slate-800 bg-transparent text-sm font-medium py-2.5";
@@ -1239,7 +1310,7 @@ export function BridgeCard({
           className={buttonClass}
           onClick={() => handleBridgeClick(speed)}
           isLoading={isSubmitting}
-          disabled={!validation.isValid || isLoading || isBridgeLoading || isSwitchingChain}
+          disabled={!validation.isValid || automaticQuoteBlocked || isLoading || isBridgeLoading || isSwitchingChain}
         >
           {buttonText}
         </LoadingButton>
@@ -1256,6 +1327,9 @@ export function BridgeCard({
       <>
         <BridgeComparison
           fastTransferSupported={fastTransferSupported}
+          automaticClaimSupported={automaticClaimSupported}
+          automaticClaim={automaticClaim}
+          onAutomaticClaimChange={setAutomaticClaimPreference}
           selectedSpeed={activeTransferSpeed}
           onSpeedChange={setActiveTransferSpeed}
           disabled={isLoading || isBridgeLoading || isSwitchingChain}
@@ -1314,6 +1388,7 @@ export function BridgeCard({
               destination: {
                 address: loadedTransaction.targetAddress || "",
                 chain: toChainDefinition(destChainDef),
+                useForwarder: loadedTransaction.automaticClaim === true,
               },
               steps: loadedTransaction.steps || [],
             };
@@ -1424,6 +1499,7 @@ export function BridgeCard({
                 destination: {
                   address: recipientAddressValue || "",
                   chain: toChainDefinition(destChain),
+                  useForwarder: submittedAutomaticClaim,
                 },
                 steps: [],
               };
@@ -1461,6 +1537,7 @@ export function BridgeCard({
             : "waiting"
         }
         onBack={handleBackToNew}
+        failureReason={intentFailureReason}
       />
     );
   }

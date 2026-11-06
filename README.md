@@ -45,6 +45,8 @@ TURSO_AUTH_TOKEN=...                               # Server-only Turso token
 
 Bridge volume records are submitted server-side through `/api/events/burn` after a burn transaction is submitted. The route returns immediately and schedules the first-party Turso insert after the response. Turso stores an idempotent append-only `bridge_burn_submissions` ledger with origin/destination chains and addresses, entered amount, transfer type, app fee, Circle fee, and timestamps. Run `bun run db:generate` after schema changes and `bun run db:migrate` with the server-only Turso variables loaded to apply migrations.
 
+Standard transfers charge 100 USDC when a wallet reaches a cumulative 1,000,000 USDC band. Only independently verified burns advance the fee ledger. Pending recovery does not block a later Standard transfer; unresolved attempts remain saved separately. Apply migration `0004_standard_fee_reconciliation.sql` before deploying the bounded reconciliation update. See [Standard fee accounting and recovery](docs/architecture/cumulative-standard-fees.md).
+
 Detailed bridge-burn data is stored only in Turso; it is not exported as a Vercel custom event. Vercel receives only the `bridge_verified_view` counter after a submitted bridge is verified. That counter is operational telemetry and must not be used for bridge-volume reporting.
 
 Query first-party statistics for a supported rolling window with `bun run db:bridge-report -- --days 7|30|90|120`. The report prints total/fast/standard volume, app-collected fast fees, Standard cumulative fees, and bridge counts. Circle relay fees remain available separately in the ledger and are not included in the app-fee totals.
@@ -71,6 +73,7 @@ Fast tx fees are charged only for fast transfers and are included in the entered
   - `.generated/metadata/rpc.generated.json`
   - `.generated/reports/rpc-validation-report.json`
 - `bun run build` runs `metadata:refresh` automatically via `prebuild`.
+- Solana mainnet uses four keyless public RPCs with shared pacing (three HTTP request starts per second per tab, including fallbacks), at most two in-flight attempts, provider cooldowns, and a 10-second deadline per dispatched attempt. Slow polls do not overlap, and failed balance refreshes retain cached values instead of reporting zero. The generator preserves the same list; Solana endpoints are not part of the EVM Chainlist CORS probe. See [Solana RPC failover and traffic budget](docs/architecture/solana-claim-recovery.md#rpc-failover).
 
 See `CLAUDE.md` for detailed architecture documentation.
 
@@ -85,3 +88,11 @@ The homepage and `/docs` guides use canonical URLs on `https://www.cctp.io` and 
 ### Prefilled USDC routes
 
 `/usdc` lists supported mainnet routes; `/usdc/{source}/{destination}` provides a prefilled bridge with server-rendered route titles and configuration-derived FAQs. Route preselection sets chains only and never initiates a transfer. The homepage retains its existing defaults. See [route-page architecture](docs/architecture/usdc-route-pages.md).
+
+### Automatic claims
+
+Transfers to destinations with Circle forwarding support default to automatic claim, using the route metadata for EVM and Solana chains. The existing form includes a compact toggle and a bundled Total fees row; source-network gas is paid separately. Circle receives a forwarding request in the burn hook and submits the destination claim, so the recipient needs no prior destination gas balance. Solana destinations include USDC associated token-account creation in the fee and hook.
+
+Forwarding fees are freshly quoted and checked again after approval. The bundled quote displays a maximum fee with a 20% allowance for gas-price changes. Execution spends only the fresh fee; increases within that ceiling proceed. A larger increase returns to fee review before another attempt. Saved transfers retain their actual delivery method; pending manual burns are not converted to forwarding. Completion requires a matching successful destination receipt, not merely an attestation or transaction hash.
+
+Arc Max uses current native balance and gas pricing, reserving twice a conservative 1,000,000-gas budget for approval and burn, rounded down to six-decimal spendable USDC. If gas pricing cannot be read, Max reports an error instead of selecting the entire balance.
