@@ -1,6 +1,7 @@
 ---
 title: 'Solana claims pin a single public RPC and treat browser Failed-to-fetch as fatal'
 severity: 'major'
+issue: 'l3wi/cctp-bridge#21'
 ---
 
 ### Expected Behavior
