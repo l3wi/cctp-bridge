@@ -1,6 +1,7 @@
 ---
 title: 'Bridge Kit cutover documentation is stale about Solana scope'
 severity: 'minor'
+issue: 'l3wi/cctp-bridge#18'
 ---
 
 ## Expected Behavior
